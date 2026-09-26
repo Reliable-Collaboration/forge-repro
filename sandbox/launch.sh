@@ -14,7 +14,7 @@ SIZE=${1:-1920x1080}
 
 for _ in $(seq 20); do [[ -z $(sandbox_pids) ]] && break; sleep 0.5; done
 [[ -z $(sandbox_pids) ]] || { echo "sandbox already running (pid $(sandbox_pids))"; exit 1; }
-[[ -d $FORGE_SRC/.git ]] || { echo "FORGE_SRC=$FORGE_SRC is not a git checkout of forge"; exit 1; }
+[[ -e $FORGE_SRC/.git ]] || { echo "FORGE_SRC=$FORGE_SRC is not a git checkout of forge"; exit 1; }
 
 rm -rf "$SANDBOX_DIR"
 mkdir -p "$SANDBOX_DIR/data/gnome-shell/extensions/$FORGE_UUID" "$SANDBOX_DIR/config"
