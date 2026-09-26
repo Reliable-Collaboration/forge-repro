@@ -44,6 +44,12 @@ def main():
     r.append(h.layout_check("3.3", f"drag A's right edge {far} px to the right"))
     h.reset_layout()
 
+    print("slow app: hold 'grow left' on B while B's app is frozen for 0.6 s")
+    log = h.hold_keys(b["id"], h.GROW_KEYS["left"], HOLD_MS, during=h.stall_app(b["id"], 0.8, 0.6))
+    r.append(h.layout_check("3.7", f"hold 'grow left' on B for {HOLD_MS} ms, app frozen 0.6 s"))
+    r.append(h.timeline_check("3.7 (while held)", "no overlap or off-screen while the key repeats", log))
+    h.reset_layout()
+
     print("bug: shrinking the focused window past its minimum leaves a gap (shares sum < 100%)")
     h.hold_keys(a["id"], h.SHRINK_KEYS["right"], HOLD_MS)
     r.append(h.layout_check("3.4", f"hold 'shrink right' on A for {HOLD_MS} ms"))

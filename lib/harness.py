@@ -92,11 +92,13 @@ def open_editor():
     open_app("gnome-text-editor", "--standalone")
 
 
-def run_js_file(name, subs, flag):
+def run_js_file(name, subs, flag, during=None):
     code = open(os.path.join(LIB, name)).read()
     for k, v in subs.items():
         code = code.replace(k, str(v))
     js(code)
+    if during:
+        during()                 # runs while the timeline is in progress
     for _ in range(160):
         time.sleep(0.25)
         if js(f"String(globalThis.{flag}?.done)") == "true":
@@ -203,10 +205,28 @@ def monitor_size():
         .get_work_area_for_monitor(0); return [a.width, a.height]; })()"""))
 
 
-def hold_keys(win_id, keys, hold_ms=1000):
+def hold_keys(win_id, keys, hold_ms=1000, during=None):
     """Focus a window and hold a key chord with a virtual keyboard (real key repeat).
+    `during`: optional function run while the key is held (e.g. stall_app()).
     Returns the timeline log (each line has per-window x,y,w,h,p and resize() call count)."""
-    return run_js_file("holdkey.js", {"__WIN__": win_id % 1000, "__KEYS__": keys, "__HOLD_MS__": hold_ms}, "__hk")
+    return run_js_file("holdkey.js", {"__WIN__": win_id % 1000, "__KEYS__": keys, "__HOLD_MS__": hold_ms},
+                       "__hk", during)
+
+
+def stall_app(win_id, after_s, for_s):
+    """Returns a function for hold_keys(during=...): after `after_s` s, freeze the window's app
+    (SIGSTOP) for `for_s` s. The app then stops drawing, like a busy or slow app, while GNOME and
+    Forge keep going: resize requests pile up until it continues (SIGCONT)."""
+    pid = js(f"global.display.list_all_windows().find(w => w.get_id() === {win_id}).get_pid()")
+
+    def stall():
+        time.sleep(after_s)
+        os.kill(pid, 19)          # SIGSTOP
+        try:
+            time.sleep(for_s)
+        finally:
+            os.kill(pid, 18)      # SIGCONT
+    return stall
 
 
 def parse_line(line):

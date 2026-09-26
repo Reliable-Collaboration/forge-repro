@@ -28,10 +28,12 @@ def keys(side, mode):
 EDGE_TOL = 30
 
 
-def fixed_edge_check(name, win, side, mode, hold_ms):
-    """While `side` of `win` is resized by keyboard, the opposite edge must not move."""
+def fixed_edge_check(name, win, side, mode, hold_ms, stall=False):
+    """While `side` of `win` is resized by keyboard, the opposite edge must not move.
+    stall: freeze the app for 0.6 s during the hold (a slow or busy app)."""
     opp = h.OPP[side]
-    log = h.hold_keys(win["id"], keys(side, mode), hold_ms)
+    during = h.stall_app(win["id"], 0.8, 0.6) if stall else None
+    log = h.hold_keys(win["id"], keys(side, mode), hold_ms, during=during)
     samples = []
     for line in log:
         if any(t in line for t in ("start", "keys down", "holding", "keys released")):
@@ -68,6 +70,11 @@ def main():
     r.append(fixed_edge_check("2.5", b, "bottom", "grow", 0))   # single tap
     print("control: horizontal shortcut (left edge), sampled during key repeat")
     r.append(fixed_edge_check("2.6", b, side_ba, "shrink", 700))
+    print("bug: the app is slow to redraw (frozen 0.6 s) while a left/top edge grows")
+    h.reset_layout()
+    r.append(fixed_edge_check("2.7", c, "top", "grow", 1600, stall=True))
+    h.reset_layout()
+    r.append(fixed_edge_check("2.8", b, side_ba, "grow", 1600, stall=True))
     sys.exit(h.summary(r))
 
 
