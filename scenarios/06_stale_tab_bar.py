@@ -20,10 +20,15 @@ WM = h.WM
 
 
 def tab_bars():
-    """Visible Forge tab bars that still show tabs: [x, y, width, tabs]."""
-    return json.loads(h.js("""JSON.stringify(global.window_group.get_children()
-        .filter(c => c.type === "forge-deco" && c.visible && c.get_n_children() > 0)
-        .map(c => [Math.round(c.x), Math.round(c.y), Math.round(c.width), c.get_n_children()]))"""))
+    """Stray tab bars: visible ones whose container is no longer tabbed, or no longer in the tree,
+    as [x, y, width, tabs, reason]. (Tab bars of tabbed containers in the tree are fine.)"""
+    return json.loads(h.js(f"""JSON.stringify((() => {{
+        const cons = {WM}.tree.getNodeByType("CON");
+        return global.window_group.get_children()
+            .filter(c => c.type === "forge-deco" && c.visible && c.width > 0 && c.height > 0)
+            .map(c => [Math.round(c.x), Math.round(c.y), Math.round(c.width), c.get_n_children(),
+                       !cons.includes(c.parentNode) ? "container gone" : !c.parentNode.isTabbed() ? "not tabbed" : ""])
+            .filter(d => d[4]); }})())"""))
 
 
 def tabbed_group():
@@ -77,6 +82,24 @@ def main():
     r.append(check("6.2", "after closing 3 tabs at once"))
     h.open_editor()
     r.append(check("6.3", "after opening another window"))
+
+    print("bug: windows moved out of a tab group one by one (keyboard move)")
+    ids = tabbed_group()
+    print(f"          tree: {h.tree_summary()}")
+    for wid in ids:
+        h.hold_keys(wid, h.chord("window-move-left"), 0)
+        time.sleep(1.0)
+    print(f"          tree: {h.tree_summary()}")
+    r.append(check("6.4", "after moving every window out of the group"))
+    h.close_windows()
+
+    print("bug: a tab group switched back to a split")
+    h.open_editor()
+    ids = tabbed_group()
+    h.hold_keys(ids[-1], h.chord("con-tabbed-layout-toggle"), 0)
+    time.sleep(1.0)
+    print(f"          tree: {h.tree_summary()}")
+    r.append(check("6.5", "after toggling tabbed off"))
     sys.exit(h.summary(r))
 
 

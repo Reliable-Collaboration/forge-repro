@@ -126,28 +126,50 @@ def neighbour_side(a, b):
     raise ValueError("windows are not adjacent")
 
 
-def js_errors():
+def js_error_entries():
+    """The Forge JS ERROR entries in the sandbox log (message + stack), as text blocks."""
     try:
-        return sum("JS ERROR" in l for l in open(os.path.join(SANDBOX_DIR, "nested.log"), errors="replace"))
+        lines = open(os.path.join(SANDBOX_DIR, "nested.log"), errors="replace").read().splitlines()
+    except FileNotFoundError:
+        return []
+    entries = []
+    for i, line in enumerate(lines):
+        if "JS ERROR" in line and any("forge@" in l for l in lines[i:i + 12]):
+            block = [line] + [l for l in lines[i + 1:i + 12] if "@" in l and ".js:" in l]
+            entries.append("\n".join(block))
+    return entries
+
+
+def js_errors():
+    """Number of Forge exceptions in the sandbox log: JS ERROR entries whose message or stack
+    trace mentions Forge (other extensions, e.g. the Ubuntu desktop icons, log their own)."""
+    try:
+        lines = open(os.path.join(SANDBOX_DIR, "nested.log"), errors="replace").read().splitlines()
     except FileNotFoundError:
         return 0
+    count = 0
+    for i, line in enumerate(lines):
+        if "JS ERROR" in line and any("forge@" in l for l in lines[i:i + 12]):
+            count += 1
+    return count
 
 
-def settle_check(name, moved_id, side, nb_id, expect_edge, tol=TOL):
+def settle_check(name, moved_id, side, nb_id, expect_edge, tol=TOL, gap=GAP):
     """PASS if the moved edge settled near expect_edge and the neighbour sits one gap away."""
     time.sleep(1.0)
     ws = windows()
     m, n = find(ws, moved_id), find(ws, nb_id)
     got = edge(m, side)
-    gap = abs(edge(n, OPP[side]) - got)
-    ok = abs(got - expect_edge) <= tol and abs(gap - GAP) <= GAP_TOL
+    space = abs(edge(n, OPP[side]) - got)
+    ok = abs(got - expect_edge) <= tol and abs(space - gap) <= GAP_TOL
     print(f"  {'PASS' if ok else 'FAIL'}  {name}: {side} edge expected ~{expect_edge}, settled {got}; "
-          f"gap to neighbour {gap}px")
+          f"gap to neighbour {space}px")
     return ok
 
 
-def drag_edge(win_id, side, delta, steps=20, step_ms=40):
+def drag_edge(win_id, side, delta, steps=20, step_ms=40, during=None):
     """Press just outside `side` of the window (in the gap) and drag `delta` px across it.
+    `during`: optional function run while the drag is in progress (e.g. a screenshot).
     Returns (edge_before, grabbed: bool, log)."""
     w = find(windows(), win_id)
     e = edge(w, side)
@@ -157,7 +179,7 @@ def drag_edge(win_id, side, delta, steps=20, step_ms=40):
     else:
         x, y, dx, dy = w["x"] + w["w"] // 2, e + off, 0, delta
     log = run_js_file("drag.js", {"__X0__": x, "__Y0__": y, "__DX__": dx, "__DY__": dy,
-                                  "__STEPS__": steps, "__STEP_MS__": step_ms}, "__drag")
+                                  "__STEPS__": steps, "__STEP_MS__": step_ms}, "__drag", during)
     return e, any("grab-op-begin" in l for l in log), log
 
 
@@ -375,6 +397,8 @@ def timeline_problems(log, tol=30, ignore=None):
         for i, a in enumerate(ids):
             for b in ids[i + 1:]:
                 wa, wb = wins[a], wins[b]
+                if wa.get("g") and wa.get("g") == wb.get("g"):
+                    continue         # same tabbed/stacked container: they share its area
                 ox = min(wa["x"] + wa["w"], wb["x"] + wb["w"]) - max(wa["x"], wb["x"])
                 oy = min(wa["y"] + wa["h"], wb["y"] + wb["h"]) - max(wa["y"], wb["y"])
                 if ox > 2 and oy > 2 and min(ox, oy) > tol and min(ox, oy) > worst.get(("ov", a, b), (0, ""))[0]:

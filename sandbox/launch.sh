@@ -25,6 +25,8 @@ BACKEND=${SANDBOX_BACKEND:-headless}
 # (unless WxH is given), the Ubuntu session mode (dock, desktop icons, ...), its enabled/disabled
 # extension lists and its Forge settings. The real settings are only read, and copied into the
 # sandbox's own keyfile settings.
+# SANDBOX_SECOND_MONITOR=WxH adds a second virtual monitor (monitor 1), e.g. for moves between monitors
+EXTRA=${SANDBOX_SECOND_MONITOR:+--virtual-monitor $SANDBOX_SECOND_MONITOR}
 PROFILE=${SANDBOX_PROFILE:-plain}
 MODE=user
 if [[ $PROFILE == real ]]; then
@@ -88,7 +90,7 @@ gsettings set org.gnome.shell welcome-dialog-last-shown-version '999'
 
 setsid dbus-run-session -- bash -c '
   echo "$DBUS_SESSION_BUS_ADDRESS" > "'"$SANDBOX_DIR"'/bus-address"
-  exec gnome-shell --wayland --mode='"$MODE"' --'"$BACKEND"' --virtual-monitor '"$SIZE"' \
+  exec gnome-shell --wayland --mode='"$MODE"' --'"$BACKEND"' --virtual-monitor '"$SIZE"' '"$EXTRA"' \
        --wayland-display '"$SANDBOX_DISPLAY"'
 ' > "$SANDBOX_DIR/nested.log" 2>&1 < /dev/null &
 

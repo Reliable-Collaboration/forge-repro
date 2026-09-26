@@ -8,9 +8,8 @@ off-screen (#117, #271).
 Part 1, the windows fit: after a resize has left a window at its minimum, anything that shrinks
 the space (here: larger gaps; also a lower display resolution or a panel) squeezes it below
 its minimum. Expected: it keeps its minimum and the other windows give up the space.
-Part 2, the windows don't fit (one more Text Editor than fits at its minimum size, e.g. 6 side
-by side need 6 x 368 px > 1904 px on 1920x1080): setting `min-size-overflow` = tabbed / stacked
-groups windows until the rest fit.
+After such a clamp, the stored shares must match what is shown, or a later resize drifts.
+(Windows that can't all fit at their minimum sizes: see 13_overflow_policy.py, a proposal.)
 
 Run on a fresh sandbox:  sandbox/launch.sh && scenarios/04_min_size_layout.py
 """
@@ -34,37 +33,6 @@ def close_all():
     h.close_windows()
 
 
-EDITOR_MIN = (360, 200)   # GNOME Text Editor's minimum frame size (get_min_size() minus shadows)
-
-
-def overflow_count(vertical):
-    """One more editor than fits at its minimum size (plus 8 px of gaps) on this screen."""
-    width, height = h.monitor_size()
-    return (height // (EDITOR_MIN[1] + 8) if vertical else width // (EDITOR_MIN[0] + 8)) + 1
-
-
-def overflow(name, policy, split=None):
-    """Open one more editor than fits side by side (or stacked vertically with split)."""
-    close_all()
-    h.set_forge_setting("window-gap-size-increment", 1)
-    ok_key = h.set_forge_setting("min-size-overflow", policy)
-    h.open_editor()
-    if split:
-        h.js(f'(() => {{ {WM}.command({{name: "Split", orientation: "{split}"}}); return "ok"; }})()')
-        time.sleep(0.5)
-    count = overflow_count(vertical=bool(split))
-    for _ in range(count - 1):
-        h.open_editor()
-    what = f"{count} windows {'in a vertical container' if split else 'side by side'}, min-size-overflow={policy}"
-    if not ok_key:
-        print(f"  FAIL  {name}: {what}: this Forge build has no min-size-overflow setting")
-        ok = h.layout_check(name + " (layout)", f"{count} windows with no overflow handling")
-        return False
-    ok = h.layout_check(name, what)
-    print(f"          tree: {h.tree_summary()}")
-    return ok
-
-
 def main():
     if h.windows():
         raise SystemExit("sandbox must be fresh (no windows); run sandbox/launch.sh first")
@@ -74,7 +42,7 @@ def main():
     print("bug: the windows fit, but the space shrinks after a resize left one at its minimum")
     for _ in range(3):
         h.open_editor()
-    a = sorted(h.windows(), key=lambda w: w["x"])[0]
+    a, b, c = sorted(h.windows(), key=lambda w: w["x"])
     h.drag_edge(a["id"], "right", h.monitor_size()[0] // 3, steps=30)   # B (middle) ends at its minimum
     time.sleep(1.0)
     print(f"          after drag: {shares()}")
@@ -83,20 +51,15 @@ def main():
     r.append(h.layout_check("4.1", "gap size 4 -> 16 px with the middle window at its minimum"))
     print(f"          {shares()}")
 
-    print("overflow: more windows than fit at their minimum size")
-    r.append(overflow("4.2", "tabbed"))
-    r.append(overflow("4.3", "stacked"))
-    r.append(overflow("4.4", "tabbed", split="vertical"))
-    print("control: default policy keeps today's behaviour (windows overlap), no errors")
-    close_all()
-    h.set_forge_setting("min-size-overflow", "overlap")
-    for _ in range(overflow_count(vertical=False)):
-        h.open_editor()
-    probs = h.layout_problems()
-    print(f"  {'PASS' if probs else 'FAIL'}  4.5: overlap policy leaves the overflow as it is "
-          f"({len(probs)} layout problems, expected > 0)")
-    r.append(bool(probs))
+    print("bug: a resize after a window was held at its minimum drifts")
+    a0 = h.find(h.windows(), a["id"])
+    before = h.edge(h.find(h.windows(), b["id"]), "right")
+    h.drag_edge(b["id"], "right", 150, steps=20)
+    r.append(h.settle_check("4.2", b["id"], "right", c["id"], before + 150, gap=32))
+    a1 = h.find(h.windows(), a["id"])
+    ok = abs(a1["w"] - a0["w"]) <= h.TOL and abs(a1["x"] - a0["x"]) <= h.TOL
+    print(f"  {'PASS' if ok else 'FAIL'}  4.2 (others): A {a0['x']},{a0['w']} -> {a1['x']},{a1['w']} (must not change)")
+    r.append(ok)
     sys.exit(h.summary(r))
-
 
 main()

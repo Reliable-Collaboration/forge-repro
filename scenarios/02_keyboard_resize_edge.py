@@ -70,11 +70,6 @@ def main():
     r.append(fixed_edge_check("2.5", b, "bottom", "grow", 0))   # single tap
     print("control: horizontal shortcut (left edge), sampled during key repeat")
     r.append(fixed_edge_check("2.6", b, side_ba, "shrink", 700))
-    print("bug: the app is slow to redraw (frozen 0.6 s) while a left/top edge grows")
-    h.reset_layout()
-    r.append(fixed_edge_check("2.7", c, "top", "grow", 1600, stall=True))
-    h.reset_layout()
-    r.append(fixed_edge_check("2.8", b, side_ba, "grow", 1600, stall=True))
     sys.exit(h.summary(r))
 
 

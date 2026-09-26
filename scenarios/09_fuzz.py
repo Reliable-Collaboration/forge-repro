@@ -94,8 +94,10 @@ class Fuzzer:
         if roll < 0.60:
             binding = self.rng.choice(SHORTCUTS)
             focus(wid)
-            log = tap(wid, binding)
-            return f"{binding} on {tag}", None if binding == "window-toggle-float" else log
+            tap(wid, binding)
+            # layout changes move several windows at once and each app redraws at its own pace,
+            # so only the end state is checked (in-progress checks are for resizes and drags)
+            return f"{binding} on {tag}", None
         if roll < 0.85:
             side = self.rng.choice(SIDES)
             kind = self.rng.choice(["increase", "decrease"])
@@ -111,7 +113,9 @@ class Fuzzer:
         if win.get("float"):
             return f"(skip drag of floating {tag})", None
         _, grabbed, log = h.drag_edge(wid, side, delta)
-        self.dragged = wid
+        # the window GNOME grabbed (edges coincide in stacked/tabbed groups, so it may be another)
+        grab = next((l for l in log if "SIGNAL grab-op-begin" in l), "")
+        self.dragged = int(grab.split("win=")[1].split()[0]) if "win=" in grab else wid
         return f"drag {tag}'s {side} edge {delta:+d} px", log if grabbed else None
 
     def check(self, log):
@@ -122,7 +126,8 @@ class Fuzzer:
                       if not any(p.startswith(f"{f} ") or f" {f} " in p for f in floats)]
         errors = h.js_errors()
         if errors > self.errors:
-            probs.append(f"{errors - self.errors} new JS ERROR(s) in the log")
+            for entry in h.js_error_entries()[self.errors:]:
+                probs.append("Forge JS ERROR:\n            " + entry.replace("\n", "\n            "))
             self.errors = errors
         return probs
 
