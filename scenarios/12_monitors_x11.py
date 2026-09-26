@@ -40,6 +40,7 @@ def open_x11(title):
 
 
 def main():
+    h.require(apps=("xmessage",))
     if h.js("global.display.get_n_monitors()") < 2:
         raise SystemExit("needs two monitors: SANDBOX_SECOND_MONITOR=1280x1024 sandbox/launch.sh")
     h.open_editor()

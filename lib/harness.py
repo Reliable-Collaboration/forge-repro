@@ -5,7 +5,10 @@ created *inside* the nested shell, so nothing reaches the host session.
 """
 import json
 import os
+import shutil
+import signal
 import subprocess
+import sys
 import time
 
 import gi
@@ -19,8 +22,7 @@ SANDBOX_DIR = os.environ.get("SANDBOX_DIR") or os.path.join(
     os.environ.get("XDG_CACHE_HOME") or os.path.expanduser("~/.cache"), "forge-repro", "sandbox")
 
 TOL = 10      # px allowed between an edge's position at release and where it settles
-GAP = 8       # Forge's default inter-window gap in these layouts
-GAP_TOL = 4
+GAP_TOL = 4   # px allowed between the space between two windows and Forge's gap
 WM = 'Main.extensionManager.lookup("forge@jmmaranan.com").stateObj.extWm'
 # Forge's tree node for monitor 0 on the active workspace. Everything the harness inspects or
 # changes is limited to it, so windows on other workspaces are never counted or touched.
@@ -103,7 +105,11 @@ def run_js_file(name, subs, flag, during=None):
     for _ in range(160):
         time.sleep(0.25)
         if js(f"String(globalThis.{flag}?.done)") == "true":
-            return json.loads(js(f"JSON.stringify(globalThis.{flag}.log)"))
+            log = json.loads(js(f"JSON.stringify(globalThis.{flag}.log)"))
+            errors = [l for l in log if l.startswith("ERROR ")]
+            if errors:
+                raise RuntimeError(f"{name}: {errors[0][6:]}")
+            return log
     raise RuntimeError(f"{name} did not finish")
 
 
@@ -144,20 +150,21 @@ def js_error_entries():
 def js_errors():
     """Number of Forge exceptions in the sandbox log: JS ERROR entries whose message or stack
     trace mentions Forge (other extensions, e.g. the Ubuntu desktop icons, log their own)."""
-    try:
-        lines = open(os.path.join(SANDBOX_DIR, "nested.log"), errors="replace").read().splitlines()
-    except FileNotFoundError:
-        return 0
-    count = 0
-    for i, line in enumerate(lines):
-        if "JS ERROR" in line and any("forge@" in l for l in lines[i:i + 12]):
-            count += 1
-    return count
+    return len(js_error_entries())
 
 
-def settle_check(name, moved_id, side, nb_id, expect_edge, tol=TOL, gap=GAP):
-    """PASS if the moved edge settled near expect_edge and the neighbour sits one gap away."""
+def gap():
+    """The space Forge leaves between two tiled neighbours: twice its window gap (each window is
+    inset by the gap), from the sandbox's Forge settings."""
+    return 2 * int(js(f"""(() => {{ const s = {WM}.ext.settings;
+        return s.get_uint("window-gap-size") * s.get_uint("window-gap-size-increment"); }})()"""))
+
+
+def settle_check(name, moved_id, side, nb_id, expect_edge, tol=TOL, gap=None):
+    """PASS if the moved edge settled near expect_edge and the neighbour sits one gap away
+    (`gap`: default Forge's current gap, see gap())."""
     time.sleep(1.0)
+    gap = globals()["gap"]() if gap is None else gap
     ws = windows()
     m, n = find(ws, moved_id), find(ws, nb_id)
     got = edge(m, side)
@@ -242,15 +249,29 @@ def stall_app(win_id, after_s, for_s):
     """Returns a function for hold_keys(during=...): after `after_s` s, freeze the window's app
     (SIGSTOP) for `for_s` s. The app then stops drawing, like a busy or slow app, while GNOME and
     Forge keep going: resize requests pile up until it continues (SIGCONT)."""
-    pid = js(f"global.display.list_all_windows().find(w => w.get_id() === {win_id}).get_pid()")
+    pid = int(js(f"global.display.list_all_windows().find(w => w.get_id() === {win_id}).get_pid()"))
+    # Only ever signal one real process of ours, and never this script's own process group:
+    # get_pid() can be 0 or -1 when the pid is unknown, and kill() treats those as groups.
+    if pid <= 1 or pid == os.getpid() or os.getpgid(pid) == os.getpgid(0):
+        raise RuntimeError(f"stall_app: window {win_id} has no usable pid ({pid})")
+
+    def resume(*_):
+        try:
+            os.kill(pid, signal.SIGCONT)
+        except ProcessLookupError:
+            pass
 
     def stall():
         time.sleep(after_s)
-        os.kill(pid, 19)          # SIGSTOP
+        # If this script is stopped (timeout, Ctrl+C) while the app is frozen, still resume it
+        old = {s: signal.signal(s, lambda *a: (resume(), sys.exit(1))) for s in (signal.SIGTERM, signal.SIGINT)}
+        os.kill(pid, signal.SIGSTOP)
         try:
             time.sleep(for_s)
         finally:
-            os.kill(pid, 18)      # SIGCONT
+            resume()
+            for s, handler in old.items():
+                signal.signal(s, handler)
     return stall
 
 
@@ -282,10 +303,27 @@ def nested_layout(openers=(open_editor, open_editor, open_editor)):
 
 
 def summary(results):
+    """Print the result line and return the exit status: 0 only if every check passed and Forge
+    logged no JS errors."""
     errs = js_errors()
     print(f"sandbox JS errors: {errs}")
-    print(f"RESULT: {sum(results)}/{len(results)} passed")
+    print(f"RESULT: {sum(results)}/{len(results)} passed" + (f", {errs} Forge JS errors" if errs else ""))
     return 0 if all(results) and errs == 0 else 1
+
+
+SKIP = 77    # exit status of a skipped scenario (run-suite.sh reports it as skipped, not failed)
+
+
+def require(apps=(), setting=None):
+    """Skip the scenario (exit 77) unless these apps are installed and this Forge build has
+    `setting`. Call it at the start of main()."""
+    missing = [a for a in apps if not shutil.which(a)]
+    if setting and js(f"""{WM}.ext.settings.settings_schema.has_key("{setting}")""") is not True:
+        missing.append(f"Forge setting {setting} (not in this build)")
+    if missing:
+        print(f"SKIP: needs {', '.join(missing)}")
+        print(f"RESULT: skipped (needs {', '.join(missing)})")
+        sys.exit(SKIP)
 
 
 def layout_problems():

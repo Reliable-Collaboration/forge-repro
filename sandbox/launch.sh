@@ -22,7 +22,7 @@ SIZE=${1:-1920x1080}
 BACKEND=${SANDBOX_BACKEND:-headless}
 [[ $BACKEND == headless || $BACKEND == devkit ]] || { echo "SANDBOX_BACKEND must be headless or devkit"; exit 1; }
 # SANDBOX_PROFILE=real: mirror this machine's session as closely as possible: its monitor size
-# (unless WxH is given), the Ubuntu session mode (dock, desktop icons, ...), its enabled/disabled
+# (unless WxH is given), its session mode (e.g. Ubuntu's dock and desktop icons), its enabled/disabled
 # extension lists and its Forge settings. The real settings are only read, and copied into the
 # sandbox's own keyfile settings.
 # SANDBOX_SECOND_MONITOR=WxH adds a second virtual monitor (monitor 1), e.g. for moves between monitors
@@ -30,7 +30,11 @@ EXTRA=${SANDBOX_SECOND_MONITOR:+--virtual-monitor $SANDBOX_SECOND_MONITOR}
 PROFILE=${SANDBOX_PROFILE:-plain}
 MODE=user
 if [[ $PROFILE == real ]]; then
-  MODE=ubuntu
+  # The session mode of the running session, if gnome-shell has one installed (e.g. ubuntu)
+  MODE=$(gdbus call --session --dest org.gnome.Shell --object-path /org/gnome/Shell \
+           --method org.freedesktop.DBus.Properties.Get org.gnome.Shell Mode 2>/dev/null \
+         | grep -oP "'\K[a-z-]+" || true)
+  [[ -n $MODE && -e /usr/share/gnome-shell/modes/$MODE.json ]] || MODE=user
   if [[ -z ${1:-} ]]; then
     SIZE=$(gdbus call --session --dest org.gnome.Mutter.DisplayConfig --object-path /org/gnome/Mutter/DisplayConfig \
              --method org.gnome.Mutter.DisplayConfig.GetCurrentState \
@@ -48,14 +52,31 @@ for _ in $(seq 20); do [[ -z $(sandbox_pids) ]] && break; sleep 0.5; done
 [[ -z $(sandbox_pids) ]] || { echo "sandbox already running (pid $(sandbox_pids))"; exit 1; }
 [[ -e $FORGE_SRC/.git ]] || { echo "FORGE_SRC=$FORGE_SRC is not a git checkout of forge"; exit 1; }
 
+# SANDBOX_DIR is wiped on every launch: only accept a directory that looks like one of ours.
+case $SANDBOX_DIR in
+  "$HOME"/?*|/tmp/?*) ;;
+  *) echo "refusing: SANDBOX_DIR=$SANDBOX_DIR must be under \$HOME or /tmp"; exit 1 ;;
+esac
+[[ ! -e $SANDBOX_DIR || -e $SANDBOX_DIR/forge-version || -z $(ls -A "$SANDBOX_DIR") ]] \
+  || { echo "refusing: $SANDBOX_DIR exists and isn't a sandbox directory (no forge-version file)"; exit 1; }
 rm -rf "$SANDBOX_DIR"
-mkdir -p "$SANDBOX_DIR/data/gnome-shell/extensions/$FORGE_UUID" "$SANDBOX_DIR/config"
+mkdir -p "$SANDBOX_DIR/data/gnome-shell/extensions/$FORGE_UUID" "$SANDBOX_DIR/config" "$SANDBOX_DIR/data/dbus-1/services"
+# The document portal mounts a FUSE file system at $XDG_RUNTIME_DIR/doc, which the sandbox shares with
+# your session (whose own portal is mounted there). Keep the sandbox's bus from starting one: apps then
+# see no document portal instead of one that hangs (the VS Code snap waits on it forever).
+printf '[D-BUS Service]\nName=org.freedesktop.portal.Documents\nExec=/bin/false\n' \
+  > "$SANDBOX_DIR/data/dbus-1/services/org.freedesktop.portal.Documents.service"
 
 # Build. Only `make build` / `make dist`: forge's default target runs `killall -HUP gnome-shell`.
 # </dev/null because `make metadata` runs `git shortlog`, which otherwise waits on stdin.
-( cd "$FORGE_SRC" && make build </dev/null >/dev/null && make dist </dev/null >/dev/null )
-# `make build` regenerates po/*.po as a side effect; keep the checkout clean.
-git -C "$FORGE_SRC" checkout -- po/
+# `make build` also regenerates po/*.po. Put them back afterwards, unless you had changed them.
+PO_DIRTY=$(git -C "$FORGE_SRC" status --porcelain -- po/)
+( cd "$FORGE_SRC" && make dist </dev/null >/dev/null )      # dist depends on build
+if [[ -z $PO_DIRTY ]]; then
+  git -C "$FORGE_SRC" checkout -- po/
+else
+  echo "note: po/ had uncommitted changes, so it was left as the build wrote it"
+fi
 unzip -q -o "$FORGE_SRC/$FORGE_UUID.zip" -d "$SANDBOX_DIR/data/gnome-shell/extensions/$FORGE_UUID"
 # Sandbox-only helper that enables unsafe mode (org.gnome.Shell.Eval) for the test driver.
 cp -r "$REPRO_ROOT/sandbox/sandbox-unsafe@local" "$SANDBOX_DIR/data/gnome-shell/extensions/"
@@ -78,7 +99,11 @@ for group in cfg.sections():
     if group not in schemas:
         continue
     for key, value in cfg[group].items():
-        subprocess.run(["gsettings", "--schemadir", schemadir, "set", schemas[group], key, value], check=True)
+        # A key this build doesn't have (e.g. left over from an older Forge) is skipped
+        r = subprocess.run(["gsettings", "--schemadir", schemadir, "set", schemas[group], key, value],
+                           capture_output=True, text=True)
+        if r.returncode:
+            print(f"real profile: skipped Forge setting {key}: {r.stderr.strip()}")
 print(f"real profile: {len(enabled) - 1} extensions enabled, Forge settings copied")
 PY
 else
@@ -87,6 +112,8 @@ fi
 gsettings set org.gnome.mutter dynamic-workspaces false        # forge: no dynamic workspaces
 gsettings set org.gnome.desktop.wm.preferences num-workspaces 4
 gsettings set org.gnome.shell welcome-dialog-last-shown-version '999'
+# The helper extension (and Forge) load on any GNOME Shell version
+gsettings set org.gnome.shell disable-extension-version-validation true
 
 setsid dbus-run-session -- bash -c '
   echo "$DBUS_SESSION_BUS_ADDRESS" > "'"$SANDBOX_DIR"'/bus-address"

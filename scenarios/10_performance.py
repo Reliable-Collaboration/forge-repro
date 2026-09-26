@@ -110,6 +110,13 @@ def main():
             json.dump(reports, f, indent=1)
 
     r = []
+    missing = sorted({m for rep in reports.values() for m in rep.get("missing", [])})
+    if missing:
+        print(f"  info  this build has no {', '.join(missing)}: those parts aren't measured")
+    if "wm._liveResizeNeighbors" in missing:
+        # 10.1/10.2 count the live-resize loop's requests: without it they'd pass without measuring
+        print("  FAIL  10.1/10.2: can't measure: this build has no live-resize loop (_liveResizeNeighbors)")
+        sys.exit(h.summary([False]))
     other = sum(rep["moves"].get("wm._liveResizeNeighbors", {}).get("otherWorkspace", 0)
                 for rep in (reports["drag"], reports["hold"]))
     ok = other == 0

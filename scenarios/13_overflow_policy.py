@@ -63,6 +63,7 @@ def overflow(name, policy, split=None):
 def main():
     if h.windows():
         raise SystemExit("sandbox must be fresh (no windows); run sandbox/launch.sh first")
+    h.require(setting="min-size-overflow")    # a proposal: only its branch has the setting
     h.set_forge_setting("auto-split-enabled", False)   # new windows join the focused window's split
     r = []
     print("more windows than fit at their minimum size")

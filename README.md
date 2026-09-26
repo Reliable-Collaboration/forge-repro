@@ -22,21 +22,26 @@ that both **people** and **AI coding agents** can use it:
 
 ## Quick start
 
-Requirements:
+Requirements (Debian/Ubuntu package names):
 - GNOME Shell 50+ (the tests run `gnome-shell --headless` with a virtual monitor);
-- `make`, `gettext`, `unzip`;
-- Python 3 with PyGObject;
-- GNOME Text Editor;
-- Pillow (screenshots only);
-- to watch the tests live: GStreamer with `pipewiresrc` and `gtksink` (Debian/Ubuntu:
-  `gstreamer1.0-pipewire`, `gstreamer1.0-gtk3`).
+- `make`, `gettext`, `zip`, `unzip` (to build Forge), `dconf-cli` (the `real` profile);
+- Python 3 with PyGObject and GTK 3's introspection data (`python3-gi`, `gir1.2-gtk-3.0`);
+- GNOME Text Editor (every scenario uses it).
+
+Optional:
+- `07_real_apps.py` also uses Ptyxis, Files (Nautilus) and VS Code, and `12_monitors_x11.py` uses
+  `xmessage` (`x11-utils`). A scenario whose apps are missing is reported as skipped.
+- Pillow (`python3-pil`) for screenshots.
+- To watch the tests live: GStreamer with `pipewiresrc` and `gtksink` (`gstreamer1.0-pipewire`,
+  `gstreamer1.0-gtk3`).
 
 It finds the Forge checkout it is part of (`tests/` inside Forge) or a sibling `../forge` clone.
 Set `FORGE_SRC=/path/to/forge` to test another checkout or a git worktree.
 
 ```sh
 sandbox/watch.py &                 # optional: a window that shows the test monitor live
-sandbox/run-suite.sh               # build Forge, run every scenario, print a summary
+sandbox/run-suite.sh               # build Forge, run every scenario, print a summary;
+                                   # exit status 0 = every scenario passed (or was skipped)
 sandbox/run-suite.sh 01 03         # just these scenarios
 ```
 
@@ -49,7 +54,10 @@ sandbox/stop.sh
 ```
 
 Each scenario needs a **fresh** sandbox, because it opens its own windows; `run-suite.sh` starts one per
-scenario. Output looks like this:
+scenario (with a second monitor for the scenarios that ask for one). It keeps each scenario's output in
+`~/.cache/forge-repro/suite/<commit>-<profile>/`; a checkout with uncommitted changes gets its own
+directory (`<commit>-dirty-<hash>`), so a run before and after a change never overwrite each other.
+Output looks like this:
 
 ```
 bug: growing a window into a neighbour at its minimum size
@@ -85,7 +93,9 @@ RESULT: 8/12 passed
   - its own extensions directory (`XDG_DATA_HOME`);
   - keyfile settings (`GSETTINGS_BACKEND=keyfile`).
 
-  Your session's dconf, extensions and windows are never touched.
+  Your session's dconf, extensions and windows are never touched. The sandbox does share your
+  `XDG_RUNTIME_DIR` (its Wayland socket lives there), so it never starts a document portal: that
+  would try to mount over your session's `$XDG_RUNTIME_DIR/doc`.
 
   ⚠️ Only `make build` and `make dist` are used, because Forge's default `make` target runs
   `killall -HUP gnome-shell`.
@@ -111,21 +121,23 @@ RESULT: 8/12 passed
 
 | Scenario | What it checks | Bug / PR |
 |---|---|---|
-| `01_cross_container_snapback.py` | Mouse drags and held resize shortcuts against a neighbour in **another container** keep their size | \<issue 1\>, #532 |
-| `02_keyboard_resize_edge.py` | "Grow bottom/top" shortcuts move the bottom/top edge, not the opposite one | \<issue 2\> |
-| `03_resize_bounds.py` | A resize **stops at the neighbour's minimum size**, also while a key is held and with a slow app | \<issue 3\> |
+| `01_cross_container_snapback.py` | Mouse drags and held resize shortcuts against a neighbour in **another container** keep their size | \<issue C\>, #532 |
+| `02_keyboard_resize_edge.py` | "Grow bottom/top" shortcuts move the bottom/top edge, not the opposite one | \<issue A\> |
+| `03_resize_bounds.py` | A resize **stops at the neighbour's minimum size**, also while a key is held and with a slow app | \<issue D\> |
 | `04_min_size_layout.py` | Windows keep their **minimum size** when the space shrinks, and a later resize doesn't drift | #117, #271 |
-| `06_stale_tab_bar.py` | No tab bar is left behind when a tab group's windows close together, move out, or it's switched back to a split | \<issue 6\> |
+| `06_stale_tab_bar.py` | No tab bar is left behind when a tab group's windows close together, move out, or it's switched back to a split | \<issue F\> |
 | `07_real_apps.py` | Checks 01–03 with real apps (Ptyxis, Files, VS Code), in the layout Forge builds by itself and the other direction | |
-| `08_nested_same_direction.py` | Resizing a window's outer edge leaves its sibling alone in `HSPLIT[A, HSPLIT[B, C]]` (mouse and keyboard) | \<issue 7\> |
+| `08_nested_same_direction.py` | Resizing a window's outer edge leaves its sibling alone in `HSPLIT[A, HSPLIT[B, C]]` (mouse and keyboard) | \<issue E\> |
 | `09_fuzz.py` | **Randomized stress test**: random actions, the layout rules checked after each one | finds new bugs |
 | `10_performance.py` | Timings of Forge's hot paths, and the window move requests it sends (none should be redundant) | \<perf PR\> |
-| `11_slow_app.py` | A slow app's window is resized, not slid sideways, during a held resize shortcut | \<issue 9\> |
-| `12_monitors_x11.py` | Moving a window to another monitor and back, maximize/unmaximize, an X11 app (needs `SANDBOX_SECOND_MONITOR`) | regression checks |
-| `13_overflow_policy.py` | Proposal: tabs or a stack when windows can't all get their minimum size | not a fix yet |
+| `11_slow_app.py` | A slow app's window is resized, not slid sideways, during a held resize shortcut | \<issue B\> |
+| `12_monitors_x11.py` | Moving a window to another monitor and back, maximize/unmaximize, an X11 app (second monitor) | regression checks |
+| `13_overflow_policy.py` | Proposal: tabs or a stack when windows can't all get their minimum size (skipped on builds without it) | not a fix yet |
+| `14_move_out_shares.py` | Moving a window out of its container keeps the size shares at 100% (no gap, nothing off-screen) | \<issue G\> |
 
-`09_fuzz.py --seed N --steps M` is deterministic for a given seed. When a step breaks a rule, it
-stops and prints the steps so far, so the failure can be replayed.
+`09_fuzz.py --seed N --steps M` is deterministic for a given seed (default 303, so suite runs are
+repeatable); `--seed random` explores. When a step breaks a rule, it stops and prints the steps so
+far, so the failure can be replayed.
 
 ## Writing a scenario
 
@@ -144,8 +156,9 @@ provides:
 | `stall_app(id, after_s, for_s)` | For `during=`: freeze the window's app (SIGSTOP) as if it were slow to redraw |
 | `layout_check(name, what)` | PASS/FAIL on `layout_problems()` after the layout settles |
 | `timeline_check(name, what, log, ignore=id)` | PASS/FAIL on the in-progress samples; prints trajectories on failure |
-| `settle_check(name, id, side, nb_id, expected_edge)` | An edge ended where it was released, one gap from its neighbour |
+| `settle_check(name, id, side, nb_id, expected_edge)` | An edge ended where it was released, one gap (`gap()`, from Forge's settings) from its neighbour |
 | `set_forge_setting(key, value)`, `reset_layout()`, `tree_summary()`, `monitor_size()` | Settings, equal split, `HSPLIT[w1, VSPLIT[w2, w3]]`, work-area size |
+| `require(apps=(...), setting=None)` | Skip the scenario (exit 77) if an app isn't installed or the build lacks a setting |
 | `summary(results)` | Print `RESULT: n/m` and return the exit code (also fails on new `JS ERROR`s) |
 
 A minimal scenario:
@@ -192,10 +205,11 @@ This harness is designed to be run end to end by a coding agent without a person
 **Workflow**
 1. Reproduce first. Run the relevant scenario on the unmodified code and keep the output. A
    failing check with numbers ("overlap by 360 px") is the bug report.
-2. Change Forge. Run `npx prettier@2.7.1 --check` (Forge's CI style check).
-3. Run the scenario again, then `sandbox/run-suite.sh` for regressions, then
-   `SANDBOX_PROFILE=real sandbox/run-suite.sh` for the machine's real screen size and extensions.
-4. Run `scenarios/09_fuzz.py --seed N` with a few seeds. A failure prints its steps: turn them
+2. Change Forge. Run `npm test` in the Forge checkout (Forge's CI style check, Prettier).
+3. Run the scenario again, then `sandbox/run-suite.sh` for regressions (its exit status says whether
+   everything passed), then `SANDBOX_PROFILE=real sandbox/run-suite.sh` for the machine's real screen
+   size and extensions.
+4. Run `scenarios/09_fuzz.py --seed N` with a few seeds (or `--seed random`). A failure prints its steps: turn them
    into a scenario, or fix the checker if the rule was wrong (e.g. tabbed windows share space).
 5. For write-ups, capture evidence with `lib/shots.py`: a screenshot partway through the action
    shows what a person would see.

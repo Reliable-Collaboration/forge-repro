@@ -90,6 +90,7 @@ def checks(prefix, a, b, c):
 
 
 def main():
+    h.require(apps=("ptyxis", "nautilus", "code"))
     a, b, c = h.nested_layout((ptyxis, files, vscode))
     print(f"A=Ptyxis {a['id'] % 1000}, B=Files {b['id'] % 1000}, C=VS Code {c['id'] % 1000}")
     r = []

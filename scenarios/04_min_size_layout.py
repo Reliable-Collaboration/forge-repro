@@ -56,7 +56,7 @@ def main():
     a0 = h.find(h.windows(), a["id"])
     before = h.edge(h.find(h.windows(), b["id"]), "right")
     h.drag_edge(b["id"], "right", 150, steps=20)
-    r.append(h.settle_check("4.2", b["id"], "right", c["id"], before + 150, gap=32))
+    r.append(h.settle_check("4.2", b["id"], "right", c["id"], before + 150))
     a1 = h.find(h.windows(), a["id"])
     ok = abs(a1["w"] - a0["w"]) <= h.TOL and abs(a1["x"] - a0["x"]) <= h.TOL
     print(f"  {'PASS' if ok else 'FAIL'}  4.2 (others): A {a0['x']},{a0['w']} -> {a1['x']},{a1['w']} (must not change)")

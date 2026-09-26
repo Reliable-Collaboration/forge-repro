@@ -8,7 +8,7 @@ shortcut, or a mouse drag of a window edge. After every step the layout must be 
 progress (harness.timeline_problems()), and Forge must not log a JS ERROR. The first failure
 stops the run and prints the seed and the steps so far, so it can be replayed exactly.
 
-    sandbox/launch.sh && scenarios/09_fuzz.py [--seed N] [--steps N]
+    sandbox/launch.sh && scenarios/09_fuzz.py [--seed N|random] [--steps N]
 """
 import argparse
 import os
@@ -140,9 +140,11 @@ class Fuzzer:
 
 def main():
     ap = argparse.ArgumentParser()
-    ap.add_argument("--seed", type=int, default=int(time.time()) % 100000)
+    ap.add_argument("--seed", default="303",
+                    help="replay a run (default 303, so suite runs are repeatable), or 'random' to explore")
     ap.add_argument("--steps", type=int, default=150)
     args = ap.parse_args()
+    args.seed = int(time.time()) % 100000 if args.seed == "random" else int(args.seed)
     if h.windows():
         raise SystemExit("sandbox must be fresh (no windows); run sandbox/launch.sh first")
     # With more windows than fit, "overlap" (today's default) breaks the layout rules by design;
