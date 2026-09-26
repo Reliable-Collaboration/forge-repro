@@ -171,7 +171,9 @@ def settle_check(name, moved_id, side, nb_id, expect_edge, tol=TOL, gap=GAP):
 def drag_edge(win_id, side, delta, steps=20, step_ms=40, during=None):
     """Press just outside `side` of the window (in the gap) and drag `delta` px across it.
     `during`: optional function run while the drag is in progress (e.g. a screenshot).
+    Waits for the layout to settle first, so the press lands on the edge where it really is.
     Returns (edge_before, grabbed: bool, log)."""
+    settle()
     w = find(windows(), win_id)
     e = edge(w, side)
     off = 1 if side in ("right", "bottom") else -1
@@ -346,7 +348,8 @@ def reset_layout():
         here.getNodeByType("WINDOW").forEach(n => wm.tree.resetSiblingPercent(n.parentNode));
         here.getNodeByType("CON").forEach(n => wm.tree.resetSiblingPercent(n.parentNode));
         wm.renderTree("forge-repro-reset"); return "ok"; }})()""")
-    time.sleep(1.0)
+    time.sleep(0.5)
+    settle()
 
 
 def layout_check(name, what):
