@@ -37,3 +37,4 @@ before each scenario, because they create their own windows.
 | Scenario | Bug | Result on `main` @ `07498ab` |
 |---|---|---|
 | `01_cross_container_snapback.py` | A continuous resize (mouse drag / held shortcut, #532) against a neighbour in a **different container** snaps back on release | 6/10 (fails 1.3, 1.4, 1.6, 1.9) |
+| `02_keyboard_resize_edge.py` | Holding/tapping a top/bottom `window-resize-*` shortcut moves the **opposite** edge during the key repeat | 2/6 (fails 2.1–2.4) |
