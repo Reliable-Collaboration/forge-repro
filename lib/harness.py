@@ -492,20 +492,24 @@ def ensure_parent_layout(win_id, layout):
 
 
 def close_windows():
-    """Close this workspace's tiled/floating windows one at a time (never the desktop-icons window
-    or other windows Forge does not manage)."""
-    while windows():
-        before = len(windows())
-        wid = windows()[0]["id"]
+    """Close the windows Forge manages on this workspace, on every monitor, one at a time (never
+    the desktop-icons window or other windows Forge does not manage)."""
+    def managed():
+        return js(f"""JSON.stringify({WM}.tree.getNodeByType("WINDOW")
+            .filter(n => n.nodeValue.get_workspace() === global.workspace_manager.get_active_workspace())
+            .map(n => n.nodeValue.get_id()))""")
+    while ids := json.loads(managed()):
+        wid = ids[0]
         js(f"""(() => {{ global.display.list_all_windows().find(w => w.get_id() === {wid})
             ?.delete(global.get_current_time()); return "ok"; }})()""")
         for _ in range(40):
             time.sleep(0.25)
-            if len(windows()) < before:
+            if wid not in json.loads(managed()):
                 break
         else:
             raise RuntimeError(f"window {wid % 1000} did not close")
         time.sleep(0.3)
+    park_pointer()
 
 
 def settle(max_s=3.0):

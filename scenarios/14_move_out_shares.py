@@ -80,18 +80,20 @@ def move_out_towards_monitor(name):
 
 
 def edge_keeps_shares(name):
-    """Top-level A | B at custom sizes: 'move up' on B (nothing above it) leaves B where it is, so
-    the sizes must stay."""
+    """Top-level A | B at custom sizes: 'move up' on A (nothing above it, and it's already at the
+    workspace level) must leave both windows where they are, at their sizes."""
     h.open_editor()
     h.open_editor()
     a, b = sorted(h.windows(), key=lambda w: w["x"])
     h.drag_edge(a["id"], "right", h.monitor_size()[0] // 8)
-    before = sorted((w["x"], w["w"]) for w in h.windows())
-    command(b["id"], '{name: "Move", direction: "Up"}')
-    after = sorted((w["x"], w["w"]) for w in h.windows())
-    ok = all(abs(x0 - x1) <= h.TOL and abs(w0 - w1) <= h.TOL for (x0, w0), (x1, w1) in zip(before, after))
-    print(f"  {'PASS' if ok else 'FAIL'}  {name}: 'move up' on a top-level window keeps the sizes: "
-          f"{before} -> {after}")
+    place = lambda: {w["id"] % 1000: (w["x"], w["w"]) for w in h.windows()}   # noqa: E731
+    before = place()
+    command(a["id"], '{name: "Move", direction: "Up"}')
+    after = place()
+    ok = before.keys() == after.keys() and all(
+        abs(before[k][0] - after[k][0]) <= h.TOL and abs(before[k][1] - after[k][1]) <= h.TOL for k in before)
+    print(f"  {'PASS' if ok else 'FAIL'}  {name}: 'move up' on a window with nothing above keeps every place "
+          f"(x, width): {before} -> {after}")
     h.close_windows()
     time.sleep(1.0)
     return ok
