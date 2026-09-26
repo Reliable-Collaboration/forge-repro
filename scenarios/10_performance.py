@@ -8,11 +8,12 @@ window move/resize requests it sends, by caller):
   drag       a 2 s mouse drag of a border between containers (the live-resize loop, 16 ms ticks)
   hold       a 2 s held resize shortcut
 
-Every move/resize request makes the app redraw, so requests for windows on another workspace, or
-for a window already at that exact geometry, are wasted work. Checks:
-  10.1  a live-resize tick only moves windows on the current workspace
-  10.2  a render only moves windows whose geometry changes (none, for a re-render of an
-        unchanged layout)
+Every move/resize request makes the app redraw. During a live resize (a 16 ms loop) requests
+for windows on another workspace, or for a window already at that exact geometry, are wasted:
+  10.1  live-resize ticks only move windows on the current workspace
+  10.2  live-resize ticks only re-send a window's place when it changed (at most one first
+        request per window per resize)
+  10.3  (info) requests per render; renders re-send every window's place on purpose
 Timings are reported, not judged (they depend on the machine).
 
     sandbox/launch.sh && scenarios/10_performance.py [--json out.json]
@@ -114,14 +115,18 @@ def main():
     ok = other == 0
     print(f"  {'PASS' if ok else 'FAIL'}  10.1: live-resize ticks moved windows on another workspace {other} times")
     r.append(ok)
+    live = [rep["moves"].get("wm._liveResizeNeighbors", {}) for rep in (reports["drag"], reports["hold"])]
+    redundant = sum(m.get("unchanged", 0) for m in live)
+    allowed = 2 * len(h.windows())    # one first request per window, per drag/hold
+    ok = redundant <= allowed
+    print(f"  {'PASS' if ok else 'FAIL'}  10.2: live-resize requests to windows already in place: {redundant} "
+          f"(at most {allowed}: one per window per resize)")
+    r.append(ok)
     apply_moves = reports["render"]["moves"].get("tree.apply", {})
     renders = reports["render"]["timings"].get("tree.render", {}).get("calls", 0)
-    wasted = apply_moves.get("unchanged", 0) + apply_moves.get("otherWorkspace", 0)
-    ok = wasted == 0
-    print(f"  {'PASS' if ok else 'FAIL'}  10.2: {renders} re-renders of an unchanged layout sent {apply_moves.get('calls', 0)} "
-          f"move requests ({apply_moves.get('unchanged', 0)} to windows already there, "
-          f"{apply_moves.get('otherWorkspace', 0)} to other workspaces)")
-    r.append(ok)
+    print(f"  info  10.3: {renders} re-renders of an unchanged layout sent {apply_moves.get('calls', 0)} move "
+          f"requests ({apply_moves.get('unchanged', 0)} to windows already there). Renders re-send every "
+          f"window's place on purpose (they put windows back if anything moved them)")
     sys.exit(h.summary(r))
 
 

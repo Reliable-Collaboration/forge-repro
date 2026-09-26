@@ -73,7 +73,13 @@ def main():
     print("control: close the tabbed windows one at a time")
     ids = tabbed_group()
     print(f"          tree: {h.tree_summary()}  tab bars: {tab_bars()}")
-    close(ids, together=False)
+    close(ids[:1], together=False)
+    tabs = h.js(f"""(() => {{ const con = {WM}.tree.getNodeByType("CON").find(c => c.isTabbed());
+        return con && con.decoration ? con.decoration.get_n_children() : -1; }})()""")
+    ok = tabs == 2
+    print(f"  {'PASS' if ok else 'FAIL'}  6.6: after closing 1 of 3 tabs, the group's tab bar shows {tabs} tabs (2 expected)")
+    r.append(ok)
+    close(ids[1:], together=False)
     r.append(check("6.1", "after closing 3 tabs one by one"))
     print("bug: close the tabbed windows together (e.g. quitting an app with several windows)")
     ids = tabbed_group()

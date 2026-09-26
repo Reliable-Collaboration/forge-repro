@@ -73,13 +73,14 @@ def park_pointer():
         return "ok"; })()""")
 
 
-def open_app(*argv, timeout=10):
-    """Open an app inside the sandbox and wait until Forge tiles its window."""
+def open_app(*argv, timeout=10, log=None):
+    """Open an app inside the sandbox and wait until Forge tiles its window.
+    `log`: file for the app's output (default: discarded)."""
     park_pointer()
     before = len(windows())
+    out = open(log, "a") if log else subprocess.DEVNULL
     subprocess.Popen([os.path.join(ROOT, "sandbox", "run-in-sandbox.sh"), *argv],
-                     stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL, stdin=subprocess.DEVNULL,
-                     start_new_session=True)
+                     stdout=out, stderr=out, stdin=subprocess.DEVNULL, start_new_session=True)
     for _ in range(int(timeout * 4)):
         time.sleep(0.25)
         if len(windows()) > before:

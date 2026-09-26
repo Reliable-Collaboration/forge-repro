@@ -32,6 +32,7 @@ def fixed_edge_check(name, win, side, mode, hold_ms, stall=False):
     """While `side` of `win` is resized by keyboard, the opposite edge must not move.
     stall: freeze the app for 0.6 s during the hold (a slow or busy app)."""
     opp = h.OPP[side]
+    h.reset_layout()                  # start each case from a settled, equal layout
     during = h.stall_app(win["id"], 0.8, 0.6) if stall else None
     log = h.hold_keys(win["id"], keys(side, mode), hold_ms, during=during)
     samples = []

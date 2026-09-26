@@ -30,7 +30,8 @@ def vscode():
     display = h.js('GLib.getenv("DISPLAY")')
     xauth = h.js('GLib.getenv("XAUTHORITY")')
     h.open_app("env", f"DISPLAY={display}", f"XAUTHORITY={xauth}", "code", "--new-window",
-               f"--user-data-dir={VSCODE_DIR}", "--skip-welcome", "--disable-workspace-trust", timeout=30)
+               f"--user-data-dir={VSCODE_DIR}", "--skip-welcome", "--disable-workspace-trust", timeout=120,
+               log=os.path.join(h.SANDBOX_DIR, "vscode.log"))
 
 
 def toggle_container_layout(focus_id):

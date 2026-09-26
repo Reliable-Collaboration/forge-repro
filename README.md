@@ -63,7 +63,7 @@ RESULT: 8/12 passed
 
 ### Profiles and screen sizes
 
-- `sandbox/launch.sh 2560x1440` sets the virtual monitor size.
+- `sandbox/launch.sh 2560x1440` sets the virtual monitor size; `SANDBOX_SECOND_MONITOR=1280x1024` adds a second monitor.
 - `SANDBOX_PROFILE=real sandbox/launch.sh` mirrors the machine you run it on as closely as
   possible:
   - its monitor size;
@@ -111,15 +111,18 @@ RESULT: 8/12 passed
 
 | Scenario | What it checks | Bug / PR |
 |---|---|---|
-| `01_cross_container_snapback.py` | Mouse drags and held resize shortcuts against a neighbour in **another container** keep their size | #532, \<issue 1\> |
-| `02_keyboard_resize_edge.py` | Vertical resize shortcuts move the right edge; a **slow app** is not slid sideways during key repeat | \<issue 2\> |
-| `03_resize_bounds.py` | A resize **stops at the neighbour's minimum size**, also while the key is held, with a slow app and with a slow neighbour | \<issue 3\> |
-| `04_min_size_layout.py` | The layout respects **minimum sizes** when the space shrinks; the `min-size-overflow` setting groups windows that don't fit | #117, #271 |
-| `06_stale_tab_bar.py` | A tab bar goes away when all of its windows close at once | \<issue 6\> |
-| `07_real_apps.py` | Checks 01–03 with real apps (Ptyxis, Files, VS Code) in the layout Forge builds by itself | |
-| `08_nested_same_direction.py` | Resizing a window's outer edge leaves its sibling alone in `HSPLIT[A, HSPLIT[B, C]]` | \<issue 7\> |
+| `01_cross_container_snapback.py` | Mouse drags and held resize shortcuts against a neighbour in **another container** keep their size | \<issue 1\>, #532 |
+| `02_keyboard_resize_edge.py` | "Grow bottom/top" shortcuts move the bottom/top edge, not the opposite one | \<issue 2\> |
+| `03_resize_bounds.py` | A resize **stops at the neighbour's minimum size**, also while a key is held and with a slow app | \<issue 3\> |
+| `04_min_size_layout.py` | Windows keep their **minimum size** when the space shrinks, and a later resize doesn't drift | #117, #271 |
+| `06_stale_tab_bar.py` | No tab bar is left behind when a tab group's windows close together, move out, or it's switched back to a split | \<issue 6\> |
+| `07_real_apps.py` | Checks 01–03 with real apps (Ptyxis, Files, VS Code), in the layout Forge builds by itself and the other direction | |
+| `08_nested_same_direction.py` | Resizing a window's outer edge leaves its sibling alone in `HSPLIT[A, HSPLIT[B, C]]` (mouse and keyboard) | \<issue 7\> |
 | `09_fuzz.py` | **Randomized stress test**: random actions, the layout rules checked after each one | finds new bugs |
-| `10_performance.py` | Timings of Forge's hot paths and the window move requests it sends | \<perf PR\> |
+| `10_performance.py` | Timings of Forge's hot paths, and the window move requests it sends (none should be redundant) | \<perf PR\> |
+| `11_slow_app.py` | A slow app's window is resized, not slid sideways, during a held resize shortcut | \<issue 9\> |
+| `12_monitors_x11.py` | Moving a window to another monitor and back, maximize/unmaximize, an X11 app (needs `SANDBOX_SECOND_MONITOR`) | regression checks |
+| `13_overflow_policy.py` | Proposal: tabs or a stack when windows can't all get their minimum size | not a fix yet |
 
 `09_fuzz.py --seed N --steps M` is deterministic for a given seed. When a step breaks a rule, it
 stops and prints the steps so far, so the failure can be replayed.
@@ -177,6 +180,8 @@ Screenshots for issues and PRs (`lib/shots.py`):
 - `~/.cache/forge-repro/sandbox/nested.log` is the nested shell's log (`JS ERROR` lines are
   Forge exceptions).
 - `sandbox/run-in-sandbox.sh <cmd>` runs a program inside the sandbox session.
+- Several sandboxes can run in parallel: give each its own `SANDBOX_DIR`, `SANDBOX_DISPLAY` (e.g.
+  `wayland-sbA`) and Forge checkout (`FORGE_SRC`, e.g. a git worktree), because each build runs `make` in it.
 - `SANDBOX_BACKEND=devkit sandbox/launch.sh` also opens the Mutter devkit viewer. Its monitor is not the
   test monitor, so use `watch.py` to see the tests.
 

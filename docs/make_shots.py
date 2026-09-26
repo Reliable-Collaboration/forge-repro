@@ -88,15 +88,42 @@ def past_minimum(name):
     shots.shot(path("3", name, "after"))
 
 
-def overflow(name):
-    """Issue 4: one more window than fits side by side (tabbed setting on the fixed build)."""
+def overlaps():
+    """Overlapping regions between windows on this workspace: [(x, y, w, h)]."""
+    ws = h.windows()
+    out = []
+    for i, a in enumerate(ws):
+        for b in ws[i + 1:]:
+            x0, y0 = max(a["x"], b["x"]), max(a["y"], b["y"])
+            x1, y1 = min(a["x"] + a["w"], b["x"] + b["w"]), min(a["y"] + a["h"], b["y"] + b["h"])
+            if x1 - x0 > 2 and y1 - y0 > 2:
+                out.append((x0, y0, x1 - x0, y1 - y0))
+    return out
+
+
+def min_size_fits(name):
+    """Issue 4: the middle window is at its minimum, then the gaps grow: it must keep its minimum
+    and its neighbours give up the space, instead of it overlapping them."""
     h.set_forge_setting("auto-split-enabled", False)
-    h.set_forge_setting("min-size-overflow", "tabbed")
-    width = h.monitor_size()[0]
-    for _ in range(width // 368 + 1):
+    for _ in range(3):
         h.open_editor()
+    a, b, c = sorted(h.windows(), key=lambda w: w["x"])
+    h.drag_edge(a["id"], "right", h.monitor_size()[0] // 3, steps=30)
+    time.sleep(1.0)
+    h.set_forge_setting("window-gap-size-increment", 6)
     time.sleep(1.5)
-    shots.shot(path("4", name, "after"))
+    raw = shots.shot(path("4", name, "after-raw"))
+    # Mark where a window sticks out of the place Forge laid it out at
+    places = h.js(f"""JSON.stringify(({h.HERE}?.getNodeByType("WINDOW") ?? []).map(n => {{
+        const f = n.nodeValue.get_frame_rect(), r = n.renderRect;
+        return r ? [f.x, f.y, f.width, f.height, r.x, r.y, r.width, r.height] : null; }}).filter(Boolean))""")
+    boxes = []
+    for fx, fy, fw, fh, rx, ry, rw, rh in __import__("json").loads(places):
+        if fx + fw > rx + rw + 2:
+            boxes.append((rx + rw, fy, fx + fw - rx - rw, fh, RED, "outside its place"))
+        if fx < rx - 2:
+            boxes.append((fx, fy, rx - fx, fh, RED, "outside its place"))
+    shots.annotate(raw, path("4", name, "after"), boxes)
 
 
 def stale_tab_bar(name):
@@ -144,7 +171,7 @@ def slow_app(name):
 
 
 SHOTS = {"1": cross_container_drag, "532": held_key_cross_container, "2": wrong_edge, "3": past_minimum,
-         "4": overflow, "6": stale_tab_bar, "7": nested_same_direction, "9": slow_app}
+         "4": min_size_fits, "6": stale_tab_bar, "7": nested_same_direction, "9": slow_app}
 
 # Captions for the composed before/after images: (moment, caption on main, caption with the fix)
 COMPOSE = {
@@ -155,7 +182,7 @@ COMPOSE = {
     "2": [("during", "main: 'grow bottom' moves the TOP edge", "fix: the bottom edge moves")],
     "3": [("during", "main: still held - pushed off-screen", "fix: stops at the minimum"),
           ("after", "main: after release", "fix: after release")],
-    "4": [("after", "main: 6 windows overlap / off-screen", "fix (Tabbed): extra windows as tabs")],
+    "4": [("after", "main: the middle window sticks out of its place", "fix: it keeps its minimum, the others give way")],
     "6": [("after", "main: tab bar left behind", "fix: gone")],
     "7": [("after", "without fix: the right window grew too", "fix: only the dragged edge moved")],
     "9": [("after-resume", "main: app resumed, window still shifted", "fix: app resumed, window in place")],
