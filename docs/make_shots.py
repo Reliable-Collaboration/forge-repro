@@ -170,8 +170,40 @@ def slow_app(name):
     h.hold_keys(b["id"], h.GROW_KEYS["left"], 2400, during=during)
 
 
+def move_out(name):
+    """Issue G: move C up out of HSPLIT[A, C] (in HSPLIT[.., B]) with unequal shares."""
+    h.set_forge_setting("auto-split-enabled", False)
+    h.open_editor()
+    h.open_editor()
+    a, b = sorted(h.windows(), key=lambda w: w["x"])
+    h.drag_edge(a["id"], "right", h.monitor_size()[0] // 8)
+    focus_command(a["id"], '{name: "Split", orientation: "horizontal"}')
+    h.open_editor()
+    c = next(w for w in h.windows() if w["id"] not in (a["id"], b["id"]))
+    h.drag_edge(a["id"], "right", -h.monitor_size()[0] // 16)
+    shots.shot(path("14", name, "before"))
+    focus_command(c["id"], '{name: "Move", direction: "Up"}')
+    time.sleep(1.5)
+    raw = shots.shot(path("14", name, "after-raw"))
+    area = h.js("""JSON.stringify((() => { const a = global.workspace_manager.get_active_workspace()
+        .get_work_area_for_monitor(0); return [a.x, a.y, a.width, a.height]; })())""")
+    ax, ay, aw, ah = __import__("json").loads(area)
+    boxes = [(x, y, w, hh, RED, "overlap") for x, y, w, hh in overlaps()]
+    for w in h.windows():
+        if w["x"] + w["w"] > ax + aw + 2:
+            boxes.append((w["x"], w["y"], ax + aw - w["x"], w["h"], RED, f"{w['w']} px wide, mostly off-screen"))
+    shots.annotate(raw, path("14", name, "after"), boxes)
+
+
+def focus_command(win_id, cmd):
+    h.js(f"""(() => {{ global.display.list_all_windows().find(w => w.get_id() === {win_id})
+        .activate(global.get_current_time()); {h.WM}.command({cmd}); return "ok"; }})()""")
+    time.sleep(1.0)
+
+
 SHOTS = {"1": cross_container_drag, "532": held_key_cross_container, "2": wrong_edge, "3": past_minimum,
-         "4": min_size_fits, "6": stale_tab_bar, "7": nested_same_direction, "9": slow_app}
+         "4": min_size_fits, "6": stale_tab_bar, "7": nested_same_direction, "9": slow_app,
+         "14": move_out}
 
 # Captions for the composed before/after images: (moment, caption on main, caption with the fix)
 COMPOSE = {
@@ -185,6 +217,7 @@ COMPOSE = {
     "4": [("after", "main: the middle window sticks out of its place", "fix: it keeps its minimum, the others give way")],
     "6": [("after", "main: tab bar left behind", "fix: gone")],
     "7": [("after", "without fix: the right window grew too", "fix: only the dragged edge moved")],
+    "14": [("after", "main: after move up - a gap, and the window runs off-screen", "fix: the windows share the row")],
     "9": [("after-resume", "main: app resumed, window still shifted", "fix: app resumed, window in place")],
 }
 

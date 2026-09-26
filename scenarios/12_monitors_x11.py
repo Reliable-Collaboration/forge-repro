@@ -1,4 +1,5 @@
 #!/usr/bin/env python3
+# sandbox: second-monitor
 """Regression checks for how Forge places windows: moving a window to another monitor and back,
 an X11 (Xwayland) app, and maximize/unmaximize of a tiled window. Written for the change that
 moves and resizes a window in one request instead of move_frame() + move_resize_frame().

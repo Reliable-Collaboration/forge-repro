@@ -62,7 +62,8 @@ def annotate(src, dst, boxes, width=None):
         draw.rectangle([x, y, x + w, y + hh], outline=colour, width=max(4, img.width // 400))
         if label:
             tw, th = draw.textbbox((0, 0), label, font=font)[2:]
-            lx, ly = x + 8, max(0, y + 8)
+            # inside the image, even for a box at its right edge
+            lx, ly = min(x + 8, img.width - tw - 12), max(0, y + 8)
             draw.rectangle([lx - 6, ly - 4, lx + tw + 6, ly + th + 8], fill=colour)
             draw.text((lx, ly), label, fill=(255, 255, 255), font=font)
     if width and img.width != width:
