@@ -121,6 +121,8 @@ class Fuzzer:
         return probs
 
     def run(self, count):
+        tree_js = open(os.path.join(h.LIB, "tree.js")).read()
+        before = None
         for i in range(1, count + 1):
             self.dragged = None
             what, log = self.step()
@@ -131,10 +133,14 @@ class Fuzzer:
             if probs:
                 for p in probs:
                     print(f"          - {p}")
+                # Replays can diverge (focus and app timing), so show the full state around the failure
+                print("\nForge's tree before this step:\n" + (before or "(none)"))
+                print("\nForge's tree after it:\n" + h.js(tree_js))
                 print(f"\nFAILED at step {i} (seed {self.seed}). Steps to reproduce:")
                 for n, s in enumerate(self.steps, 1):
                     print(f"  {n:3d}. {s}")
                 return False
+            before = h.js(tree_js)
         return True
 
 

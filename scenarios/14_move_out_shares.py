@@ -1,4 +1,5 @@
 #!/usr/bin/env python3
+# sandbox: second-monitor
 """Moving a window out of its container can leave its old size share behind.
 
 Forge sizes the windows of a split by their shares (percents), which must add up to 100%. When
@@ -9,7 +10,11 @@ to more than 100% and the windows overlap or run off-screen.
 
 Found by the randomized stress test (09_fuzz.py, seed 303 on the real-size profile).
 
-Run on a fresh sandbox:  sandbox/launch.sh && scenarios/14_move_out_shares.py
+Also checks what the fix must not change: a window already at the edge of the workspace keeps
+everyone's sizes, and a container emptied by the move doesn't leave a gap.
+
+Uses a second monitor (to the right) for 14.3:
+    SANDBOX_SECOND_MONITOR=1280x1024 sandbox/launch.sh && scenarios/14_move_out_shares.py
 """
 import os
 import sys
@@ -25,37 +30,100 @@ def command(win_id, cmd):
     time.sleep(1.0)
 
 
-def setup():
-    """A | B at unequal shares, then A and C together in a container, also at unequal shares:
-    HSPLIT[HSPLIT[A, C], B]. Returns (A, B, C)."""
+def new_window(known):
+    h.open_editor()
+    return next(w for w in h.windows() if w["id"] not in known)
+
+
+def setup(container_last=False):
+    """A | B at unequal shares, then C joins one of them in a container, also at unequal shares:
+    HSPLIT[HSPLIT[A, C], B], or HSPLIT[B, HSPLIT[A, C]] with `container_last` (A is then the
+    right-hand window). Returns (A, B, C)."""
     h.open_editor()
     h.open_editor()
-    a, b = sorted(h.windows(), key=lambda w: w["x"])
-    h.drag_edge(a["id"], "right", h.monitor_size()[0] // 8)
+    left, right = sorted(h.windows(), key=lambda w: w["x"])
+    h.drag_edge(left["id"], "right", h.monitor_size()[0] // 8)
+    a, b = (right, left) if container_last else (left, right)
     command(a["id"], '{name: "Split", orientation: "horizontal"}')
-    h.open_editor()                    # joins A's container, next to A
-    c = next(w for w in h.windows() if w["id"] not in (a["id"], b["id"]))
+    c = new_window((a["id"], b["id"]))          # joins A's container, next to A
     h.drag_edge(a["id"], "right", -h.monitor_size()[0] // 16)
     return a, b, c
 
 
-def case(name, direction):
-    a, b, c = setup()
-    print(f"before: {h.tree_summary()}")
-    command(c["id"], f'{{name: "Move", direction: "{direction}"}}')
-    ok = h.layout_check(name, f"move C {direction.lower()} out of its container: shares still add up, "
-                              "no overlap or off-screen")
+def finish(name, what, moved=None):
+    ok = h.layout_check(name, what)
+    if moved and moved["id"] not in [w["id"] for w in h.windows()]:
+        print(f"  FAIL  {name} (monitor): the moved window left this monitor")
+        ok = False
     print(f"          after: {h.tree_summary()}")
     h.close_windows()
     time.sleep(1.0)
     return ok
 
 
+def move_out(name, direction):
+    a, b, c = setup()
+    print(f"before: {h.tree_summary()}")
+    command(c["id"], f'{{name: "Move", direction: "{direction}"}}')
+    return finish(name, f"move C {direction.lower()} out of its container: shares still add up, "
+                        "no overlap or off-screen", moved=c)
+
+
+def move_out_towards_monitor(name):
+    """HSPLIT[B, HSPLIT[A, C]] with another monitor to the right: 'move right' on C takes it out
+    of its container, onto this monitor's workspace level (Forge's MONITOR case)."""
+    a, b, c = setup(container_last=True)
+    print(f"before: {h.tree_summary()}")
+    command(c["id"], '{name: "Move", direction: "Right"}')
+    return finish(name, "move C right, out of its container towards the other monitor: shares add up",
+                  moved=c)
+
+
+def edge_keeps_shares(name):
+    """Top-level A | B at custom sizes: 'move up' on B (nothing above it) leaves B where it is, so
+    the sizes must stay."""
+    h.open_editor()
+    h.open_editor()
+    a, b = sorted(h.windows(), key=lambda w: w["x"])
+    h.drag_edge(a["id"], "right", h.monitor_size()[0] // 8)
+    before = sorted((w["x"], w["w"]) for w in h.windows())
+    command(b["id"], '{name: "Move", direction: "Up"}')
+    after = sorted((w["x"], w["w"]) for w in h.windows())
+    ok = all(abs(x0 - x1) <= h.TOL and abs(w0 - w1) <= h.TOL for (x0, w0), (x1, w1) in zip(before, after))
+    print(f"  {'PASS' if ok else 'FAIL'}  {name}: 'move up' on a top-level window keeps the sizes: "
+          f"{before} -> {after}")
+    h.close_windows()
+    time.sleep(1.0)
+    return ok
+
+
+def emptied_container(name):
+    """HSPLIT[HSPLIT[HSPLIT[W], X], Y], W and X at unequal shares: 'move up' on W empties W's
+    container; X must take the whole of it, not leave W's share as a gap."""
+    h.open_editor()
+    h.open_editor()
+    w, y = sorted(h.windows(), key=lambda v: v["x"])
+    command(w["id"], '{name: "Split", orientation: "horizontal"}')
+    x = new_window((w["id"], y["id"]))
+    command(w["id"], '{name: "Split", orientation: "horizontal"}')
+    h.drag_edge(w["id"], "right", -h.monitor_size()[0] // 16)
+    print(f"before: {h.tree_summary()}")
+    command(w["id"], '{name: "Move", direction: "Up"}')
+    return finish(name, "move W up out of a nested container: no gap where it was", moved=w)
+
+
 def main():
     if h.windows():
         raise SystemExit("sandbox must be fresh (no windows); run sandbox/launch.sh first")
     h.set_forge_setting("auto-split-enabled", False)   # new windows join the focused window's split
-    r = [case("14.1", "Up"), case("14.2", "Down")]
+    h.set_forge_setting("move-pointer-focus-enabled", False)
+    r = [move_out("14.1", "Up"), move_out("14.2", "Down")]
+    if h.js("global.display.get_n_monitors()") >= 2:
+        r.append(move_out_towards_monitor("14.3"))
+    else:
+        print("  SKIP  14.3: needs a second monitor to the right")
+    r.append(edge_keeps_shares("14.4"))
+    r.append(emptied_container("14.5"))
     sys.exit(h.summary(r))
 
 
