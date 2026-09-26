@@ -27,11 +27,13 @@ def main():
     print(f"layout: [A={a['id'] % 1000} | B={b['id'] % 1000}] side by side (Text Editor: min frame 360x200)")
     r = []
     print("bug: growing a window into a neighbour at its minimum size")
-    h.hold_keys(a["id"], h.GROW_KEYS["right"], HOLD_MS)
+    log = h.hold_keys(a["id"], h.GROW_KEYS["right"], HOLD_MS)
     r.append(h.layout_check("3.1", f"hold 'grow right' on A for {HOLD_MS} ms"))
+    r.append(h.timeline_check("3.1 (while held)", "no overlap or off-screen while the key repeats", log))
     h.reset_layout()
-    h.hold_keys(b["id"], h.GROW_KEYS["left"], HOLD_MS)
+    log = h.hold_keys(b["id"], h.GROW_KEYS["left"], HOLD_MS)
     r.append(h.layout_check("3.2", f"hold 'grow left' on B for {HOLD_MS} ms"))
+    r.append(h.timeline_check("3.2 (while held)", "no overlap or off-screen while the key repeats", log))
     h.reset_layout()
     h.drag_edge(a["id"], "right", 1300, steps=40)
     r.append(h.layout_check("3.3", "drag A's right edge 1300 px to the right"))
@@ -48,8 +50,9 @@ def main():
     con = sorted([w for w in ws if w["pid"] == "con"], key=lambda w: w["y"])
     if len(con) == 2 and con[0]["playout"] == "VSPLIT":
         h.reset_layout()
-        h.hold_keys(con[0]["id"], h.GROW_KEYS["bottom"], HOLD_MS)
+        log = h.hold_keys(con[0]["id"], h.GROW_KEYS["bottom"], HOLD_MS)
         r.append(h.layout_check("3.5", f"hold 'grow bottom' on the upper window for {HOLD_MS} ms"))
+        r.append(h.timeline_check("3.5 (while held)", "no overlap or off-screen while the key repeats", log))
         # Cross-container (parent pairs): grow a window in the container toward the top-level
         # window. On builds without the issue 1 fix, the held resize snaps back on release, so
         # this case only exercises the limit once issue 1 is fixed too.
@@ -57,8 +60,9 @@ def main():
         h.reset_layout()
         top = next(w for w in h.windows() if w["pid"] == "top")
         side = h.neighbour_side(h.find(h.windows(), con[0]["id"]), top)
-        h.hold_keys(con[0]["id"], h.GROW_KEYS[side], HOLD_MS)
+        log = h.hold_keys(con[0]["id"], h.GROW_KEYS[side], HOLD_MS)
         r.append(h.layout_check("3.6", f"hold 'grow {side}' on the upper window for {HOLD_MS} ms"))
+        r.append(h.timeline_check("3.6 (while held)", "no overlap or off-screen while the key repeats", log))
     else:
         print(f"  SKIP  3.5: third window did not form a vertical container: {ws}")
     sys.exit(h.summary(r))

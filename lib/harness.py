@@ -291,3 +291,43 @@ def tree_summary():
         const fmt = (n) => n.nodeType === "WINDOW" ? `w${{n.nodeValue.get_id() % 1000}}`
             : `${{n.layout}}[${{n.childNodes.map(fmt).join(", ")}}]`;
         return mon ? fmt(mon) : "(no windows)"; }})()""")
+
+
+def timeline_problems(log, tol=30):
+    """Check every sample of a hold_keys()/drag_edge() timeline: windows must not overlap each
+    other or leave the work area by more than `tol` px while the input is still going on.
+    (`tol` allows for Wayland showing a new position a frame or two before the new size.)"""
+    area = js("""(() => { const a = global.workspace_manager.get_active_workspace().get_work_area_for_monitor(0);
+        return [a.x, a.y, a.width, a.height]; })()""")
+    ax, ay, aw, ah = area
+    worst = {}
+    for line in log:
+        wins = {k: v for k, v in parse_line(line).items() if k != "calls"}
+        tag = line.split(" | ")[0][:40]
+        for wid, w in wins.items():
+            out = max(ax - w["x"], ay - w["y"], w["x"] + w["w"] - (ax + aw), w["y"] + w["h"] - (ay + ah))
+            if out > tol and out > worst.get(("out", wid), (0, ""))[0]:
+                worst[("out", wid)] = (out, tag)
+        ids = sorted(wins)
+        for i, a in enumerate(ids):
+            for b in ids[i + 1:]:
+                wa, wb = wins[a], wins[b]
+                ox = min(wa["x"] + wa["w"], wb["x"] + wb["w"]) - max(wa["x"], wb["x"])
+                oy = min(wa["y"] + wa["h"], wb["y"] + wb["h"]) - max(wa["y"], wb["y"])
+                if ox > 2 and oy > 2 and min(ox, oy) > tol and min(ox, oy) > worst.get(("ov", a, b), (0, ""))[0]:
+                    worst[("ov", a, b)] = (min(ox, oy), tag)
+    probs = []
+    for key, (px, tag) in worst.items():
+        if key[0] == "out":
+            probs.append(f"{key[1]} {px:.0f} px outside the work area ({tag})")
+        else:
+            probs.append(f"{key[1]} and {key[2]} overlap by {px:.0f} px ({tag})")
+    return probs
+
+
+def timeline_check(name, what, log):
+    probs = timeline_problems(log)
+    print(f"  {'PASS' if not probs else 'FAIL'}  {name}: {what}")
+    for p in probs:
+        print(f"          - {p}")
+    return not probs
