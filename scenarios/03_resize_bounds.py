@@ -50,6 +50,11 @@ def main():
     r.append(h.timeline_check("3.7 (while held)", "no overlap or off-screen while the key repeats", log))
     h.reset_layout()
 
+    print("slow neighbour: hold 'grow left' on B while A's app is frozen for 0.2 s")
+    log = h.hold_keys(b["id"], h.GROW_KEYS["left"], 2000, during=h.stall_app(a["id"], 0.9, 0.2))
+    r.append(h.timeline_check("3.8 (while held)", "the slow neighbour is not overlapped while it catches up", log))
+    h.reset_layout()
+
     print("bug: shrinking the focused window past its minimum leaves a gap (shares sum < 100%)")
     h.hold_keys(a["id"], h.SHRINK_KEYS["right"], HOLD_MS)
     r.append(h.layout_check("3.4", f"hold 'shrink right' on A for {HOLD_MS} ms"))
