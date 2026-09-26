@@ -52,6 +52,7 @@ def main():
     print(f"          {shares()}")
 
     print("bug: a resize after a window was held at its minimum drifts")
+    h.settle()
     a0 = h.find(h.windows(), a["id"])
     before = h.edge(h.find(h.windows(), b["id"]), "right")
     h.drag_edge(b["id"], "right", 150, steps=20)

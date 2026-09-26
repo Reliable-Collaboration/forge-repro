@@ -33,17 +33,6 @@ SHORTCUTS = (["con-split-layout-toggle", "con-split-horizontal", "con-split-vert
 MAX_WINDOWS = 7
 
 
-def settle():
-    """Wait until the layout stops changing (max ~3 s)."""
-    prev = None
-    for _ in range(10):
-        time.sleep(0.3)
-        cur = [(w["id"], w["x"], w["y"], w["w"], w["h"]) for w in h.windows()]
-        if cur == prev:
-            return
-        prev = cur
-
-
 def focus(win_id):
     h.js(f"""(() => {{ global.display.list_all_windows().find(w => w.get_id() === {win_id})
         ?.activate(global.get_current_time()); return "ok"; }})()""")
@@ -135,7 +124,7 @@ class Fuzzer:
         for i in range(1, count + 1):
             self.dragged = None
             what, log = self.step()
-            settle()
+            h.settle()
             self.steps.append(what)
             probs = self.check(log)
             print(f"  {'ok  ' if not probs else 'FAIL'} {i:3d}. {what}   {h.tree_summary()}", flush=True)

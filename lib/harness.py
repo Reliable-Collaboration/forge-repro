@@ -463,3 +463,15 @@ def close_windows():
         else:
             raise RuntimeError(f"window {wid % 1000} did not close")
         time.sleep(0.3)
+
+
+def settle(max_s=3.0):
+    """Wait until the layout on this workspace stops changing (checked every 0.3 s, at most
+    `max_s`). Use before acting on window positions after something that re-lays out."""
+    prev = None
+    for _ in range(int(max_s / 0.3)):
+        time.sleep(0.3)
+        cur = [(w["id"], w["x"], w["y"], w["w"], w["h"]) for w in windows()]
+        if cur == prev:
+            return
+        prev = cur
