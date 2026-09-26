@@ -15,15 +15,12 @@ import sys
 sys.path.insert(0, os.path.join(os.path.dirname(os.path.abspath(__file__)), "..", "lib"))
 import harness as h  # noqa: E402
 
-# Forge default bindings. increase = grow that edge, decrease = shrink it.
-KEYS = {
-    ("bottom", "grow"): "0xffe3, 0xffeb, 0x75",               # Ctrl+Super+U
-    ("bottom", "shrink"): "0xffe3, 0xffe1, 0xffeb, 0x69",     # Ctrl+Shift+Super+I
-    ("top", "grow"): "0xffe3, 0xffeb, 0x69",                  # Ctrl+Super+I
-    ("top", "shrink"): "0xffe3, 0xffe1, 0xffeb, 0x75",        # Ctrl+Shift+Super+U
-    ("left", "grow"): "0xffe3, 0xffeb, 0x79",                 # Ctrl+Super+Y
-    ("left", "shrink"): "0xffe3, 0xffe1, 0xffeb, 0x6f",       # Ctrl+Shift+Super+O
-}
+# Forge's window-resize-<edge>-increase / -decrease shortcuts, read from its settings
+# (defaults: grow bottom Ctrl+Super+U, shrink bottom Ctrl+Shift+Super+I, ...).
+def keys(side, mode):
+    return (h.GROW_KEYS if mode == "grow" else h.SHRINK_KEYS)[side]
+
+
 # The non-resized edge may shift by at most two resize steps (2 x 15 px) while the key repeats:
 # on Wayland mutter applies a new position immediately but a new size only when the client
 # commits it, so a left/top edge resize can show the window shifted by a step or two in
@@ -34,7 +31,7 @@ EDGE_TOL = 30
 def fixed_edge_check(name, win, side, mode, hold_ms):
     """While `side` of `win` is resized by keyboard, the opposite edge must not move."""
     opp = h.OPP[side]
-    log = h.hold_keys(win["id"], KEYS[(side, mode)], hold_ms)
+    log = h.hold_keys(win["id"], keys(side, mode), hold_ms)
     samples = []
     for line in log:
         if any(t in line for t in ("start", "keys down", "holding", "keys released")):
@@ -55,8 +52,10 @@ def fixed_edge_check(name, win, side, mode, hold_ms):
 
 def main():
     a, b, c = h.nested_layout()
+    h.ensure_parent_layout(c["id"], "VSPLIT")      # B above C (auto-split varies with screen size)
+    h.reset_layout()
+    b, c = sorted((h.find(h.windows(), b["id"]), h.find(h.windows(), c["id"])), key=lambda w: w["y"])
     ws = h.windows()
-    assert b["playout"] == "VSPLIT", f"expected CON VSPLIT, got {b['playout']}"
     print(f"layout: A={a['id'] % 1000} + CON VSPLIT[B={b['id'] % 1000} (top), C={c['id'] % 1000} (bottom)]")
     side_ba = h.neighbour_side(h.find(ws, b["id"]), h.find(ws, a["id"]))
 

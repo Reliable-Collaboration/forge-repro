@@ -8,8 +8,9 @@ off-screen (#117, #271).
 Part 1, the windows fit: after a resize has left a window at its minimum, anything that shrinks
 the space (here: larger gaps; also a lower display resolution or a panel) squeezes it below
 its minimum. Expected: it keeps its minimum and the other windows give up the space.
-Part 2, the windows don't fit (6 Text Editors side by side need 6 x 368 px > 1904 px):
-setting `min-size-overflow` = tabbed / stacked groups windows until the rest fit.
+Part 2, the windows don't fit (one more Text Editor than fits at its minimum size, e.g. 6 side
+by side need 6 x 368 px > 1904 px on 1920x1080): setting `min-size-overflow` = tabbed / stacked
+groups windows until the rest fit.
 
 Run on a fresh sandbox:  sandbox/launch.sh && scenarios/04_min_size_layout.py
 """
@@ -28,23 +29,22 @@ def shares():
 
 
 def close_all():
-    """Close monitor 0's windows one at a time. (Closing all windows of a tabbed container at
-    the same moment leaves its tab bar on screen: a separate upstream bug, not tested here.)"""
-    while h.windows():
-        before = len(h.windows())
-        h.js("""(() => { global.display.list_all_windows().find(w => w.get_monitor() === 0)
-            .delete(global.get_current_time()); return "ok"; })()""")
-        for _ in range(40):
-            time.sleep(0.25)
-            if len(h.windows()) < before:
-                break
-        else:
-            raise RuntimeError("window did not close")
-        time.sleep(0.3)
+    """Close the windows one at a time. (Closing all windows of a tabbed container at the same
+    moment leaves its tab bar on screen: a separate upstream bug, scenario 06.)"""
+    h.close_windows()
+
+
+EDITOR_MIN = (360, 200)   # GNOME Text Editor's minimum frame size (get_min_size() minus shadows)
+
+
+def overflow_count(vertical):
+    """One more editor than fits at its minimum size (plus 8 px of gaps) on this screen."""
+    width, height = h.monitor_size()
+    return (height // (EDITOR_MIN[1] + 8) if vertical else width // (EDITOR_MIN[0] + 8)) + 1
 
 
 def overflow(name, policy, split=None):
-    """Open windows until 6 editors are side by side (or stacked vertically with split)."""
+    """Open one more editor than fits side by side (or stacked vertically with split)."""
     close_all()
     h.set_forge_setting("window-gap-size-increment", 1)
     ok_key = h.set_forge_setting("min-size-overflow", policy)
@@ -52,12 +52,13 @@ def overflow(name, policy, split=None):
     if split:
         h.js(f'(() => {{ {WM}.command({{name: "Split", orientation: "{split}"}}); return "ok"; }})()')
         time.sleep(0.5)
-    for _ in range(5):
+    count = overflow_count(vertical=bool(split))
+    for _ in range(count - 1):
         h.open_editor()
-    what = f"6 windows {'in a vertical container' if split else 'side by side'}, min-size-overflow={policy}"
+    what = f"{count} windows {'in a vertical container' if split else 'side by side'}, min-size-overflow={policy}"
     if not ok_key:
         print(f"  FAIL  {name}: {what}: this Forge build has no min-size-overflow setting")
-        ok = h.layout_check(name + " (layout)", "6 windows with no overflow handling")
+        ok = h.layout_check(name + " (layout)", f"{count} windows with no overflow handling")
         return False
     ok = h.layout_check(name, what)
     print(f"          tree: {h.tree_summary()}")
@@ -74,7 +75,7 @@ def main():
     for _ in range(3):
         h.open_editor()
     a = sorted(h.windows(), key=lambda w: w["x"])[0]
-    h.drag_edge(a["id"], "right", 600, steps=30)          # B (middle) ends at its minimum width
+    h.drag_edge(a["id"], "right", h.monitor_size()[0] // 3, steps=30)   # B (middle) ends at its minimum
     time.sleep(1.0)
     print(f"          after drag: {shares()}")
     h.set_forge_setting("window-gap-size-increment", 4)   # gaps 4 -> 16 px
@@ -89,7 +90,7 @@ def main():
     print("control: default policy keeps today's behaviour (windows overlap), no errors")
     close_all()
     h.set_forge_setting("min-size-overflow", "overlap")
-    for _ in range(6):
+    for _ in range(overflow_count(vertical=False)):
         h.open_editor()
     probs = h.layout_problems()
     print(f"  {'PASS' if probs else 'FAIL'}  4.5: overlap policy leaves the overflow as it is "

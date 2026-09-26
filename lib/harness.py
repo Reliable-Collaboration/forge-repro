@@ -22,6 +22,9 @@ TOL = 10      # px allowed between an edge's position at release and where it se
 GAP = 8       # Forge's default inter-window gap in these layouts
 GAP_TOL = 4
 WM = 'Main.extensionManager.lookup("forge@jmmaranan.com").stateObj.extWm'
+# Forge's tree node for monitor 0 on the active workspace. Everything the harness inspects or
+# changes is limited to it, so windows on other workspaces are never counted or touched.
+HERE = WM + '.tree.findNode(`mo0ws${global.workspace_manager.get_active_workspace_index()}`)'
 
 _bus = None
 
@@ -53,10 +56,10 @@ def js(code):
 
 def windows():
     """Tiled windows on monitor 0 with frame geometry, node percent and parent info."""
-    return json.loads(js(f"""JSON.stringify({WM}.tree.getNodeByType("WINDOW")
-        .filter(n => n.nodeValue.get_monitor() === 0).map(n => {{
+    return json.loads(js(f"""JSON.stringify(({HERE}?.getNodeByType("WINDOW") ?? [])
+        .map(n => {{
             const f = n.nodeValue.get_frame_rect();
-            return {{ id: n.nodeValue.get_id(), x: f.x, y: f.y, w: f.width, h: f.height,
+            return {{ id: n.nodeValue.get_id(), x: f.x, y: f.y, w: f.width, h: f.height, float: n.isFloat(),
                       percent: n.percent ?? 0, playout: n.parentNode.layout,
                       pid: n.parentNode.nodeType === "CON" ? "con" : "top",
                       depth: (() => {{ let d = 0; for (let p = n.parentNode; p; p = p.parentNode) if (p.nodeType === "CON") d++; return d; }})() }}; }}))"""))
@@ -70,14 +73,14 @@ def park_pointer():
         return "ok"; })()""")
 
 
-def open_app(*argv):
+def open_app(*argv, timeout=10):
     """Open an app inside the sandbox and wait until Forge tiles its window."""
     park_pointer()
     before = len(windows())
     subprocess.Popen([os.path.join(ROOT, "sandbox", "run-in-sandbox.sh"), *argv],
                      stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL, stdin=subprocess.DEVNULL,
                      start_new_session=True)
-    for _ in range(40):
+    for _ in range(int(timeout * 4)):
         time.sleep(0.25)
         if len(windows()) > before:
             time.sleep(1.0)
@@ -156,11 +159,48 @@ def drag_edge(win_id, side, delta, steps=20, step_ms=40):
     return e, any("grab-op-begin" in l for l in log), log
 
 
-# Forge default keybindings (sandbox uses defaults): grow an edge = window-resize-*-increase
-GROW_KEYS = {"right": "0xffe3, 0xffeb, 0x6f",   # Ctrl+Super+O
-             "left": "0xffe3, 0xffeb, 0x79",    # Ctrl+Super+Y
-             "bottom": "0xffe3, 0xffeb, 0x75",  # Ctrl+Super+U
-             "top": "0xffe3, 0xffeb, 0x69"}     # Ctrl+Super+I
+MODIFIER_KEYVALS = [("CONTROL_MASK", 0xffe3), ("SHIFT_MASK", 0xffe1), ("MOD1_MASK", 0xffe9),
+                    ("SUPER_MASK", 0xffeb), ("MOD4_MASK", 0xffeb)]
+
+
+def chord(binding):
+    """Keyvals ("0xffe3, 0xffeb, 0x6f") for Forge's keybinding setting `binding` (its first
+    accelerator), e.g. chord("window-resize-right-increase") -> Ctrl+Super+O by default."""
+    gi.require_version("Gdk", "3.0")
+    gi.require_version("Gtk", "3.0")
+    from gi.repository import Gdk, Gtk
+    accel = js(f"""{WM}.ext.kbdSettings.get_strv("{binding}")[0] ?? "" """)
+    if not accel:
+        raise RuntimeError(f"Forge keybinding {binding} is not set")
+    key, mods = Gtk.accelerator_parse(accel)
+    keyvals = []
+    for name, keyval in MODIFIER_KEYVALS:
+        if mods & getattr(Gdk.ModifierType, name) and keyval not in keyvals:
+            keyvals.append(keyval)
+    return ", ".join(hex(k) for k in keyvals + [key])
+
+
+class _GrowKeys(dict):
+    """GROW_KEYS[side]: the chord that grows `side` of the focused window (from the settings)."""
+    def __missing__(self, side):
+        self[side] = chord(f"window-resize-{side}-increase")
+        return self[side]
+
+
+class _ShrinkKeys(dict):
+    def __missing__(self, side):
+        self[side] = chord(f"window-resize-{side}-decrease")
+        return self[side]
+
+
+GROW_KEYS = _GrowKeys()
+SHRINK_KEYS = _ShrinkKeys()
+
+
+def monitor_size():
+    """(width, height) of monitor 0's work area."""
+    return tuple(js("""(() => { const a = global.workspace_manager.get_active_workspace()
+        .get_work_area_for_monitor(0); return [a.width, a.height]; })()"""))
 
 
 def hold_keys(win_id, keys, hold_ms=1000):
@@ -181,12 +221,12 @@ def parse_line(line):
     return out
 
 
-def nested_layout():
-    """Open 3 editors => Forge builds [A] + CON[B, C] on monitor 0. Returns (A, B, C)."""
+def nested_layout(openers=(open_editor, open_editor, open_editor)):
+    """Open 3 windows => Forge builds [A] + CON[B, C] on monitor 0. Returns (A, B, C)."""
     if windows():
         raise SystemExit("sandbox must be fresh (no windows); run sandbox/launch.sh first")
-    for _ in range(3):
-        open_editor()
+    for opener in openers:
+        opener()
     ws = windows()
     con = [w for w in ws if w["pid"] == "con"]
     top = [w for w in ws if w["pid"] == "top"]
@@ -212,7 +252,7 @@ def layout_problems():
         const wm = {WM};
         const area = global.workspace_manager.get_active_workspace().get_work_area_for_monitor(0);
         const probs = [];
-        const nodes = wm.tree.getNodeByType("WINDOW").filter(n => n.nodeValue.get_monitor() === 0 && !n.isFloat());
+        const nodes = ({HERE}?.getNodeByType("WINDOW") ?? []).filter(n => !n.isFloat());
         const tag = (n) => n.nodeValue.get_id() % 1000;
         const frames = nodes.map(n => [n, n.nodeValue.get_frame_rect()]);
         for (const [n, f] of frames) {{
@@ -258,8 +298,10 @@ def layout_problems():
 def reset_layout():
     """Back to an equal split everywhere on monitor 0 and re-render."""
     js(f"""(() => {{ const wm = {WM};
-        wm.tree.getNodeByType("WINDOW").forEach(n => wm.tree.resetSiblingPercent(n.parentNode));
-        wm.tree.getNodeByType("CON").forEach(n => wm.tree.resetSiblingPercent(n.parentNode));
+        const here = {HERE};
+        if (!here) return "ok";
+        here.getNodeByType("WINDOW").forEach(n => wm.tree.resetSiblingPercent(n.parentNode));
+        here.getNodeByType("CON").forEach(n => wm.tree.resetSiblingPercent(n.parentNode));
         wm.renderTree("forge-repro-reset"); return "ok"; }})()""")
     time.sleep(1.0)
 
@@ -286,23 +328,24 @@ def set_forge_setting(key, value):
 def tree_summary():
     """Monitor 0's tiling tree as a compact string, e.g. HSPLIT[w12, TABBED[w13, w14]]."""
     return js(f"""(() => {{ const wm = {WM};
-        const mon = wm.tree.getNodeByType("MONITOR").find(m => m.getNodeByType("WINDOW")
-            .some(w => w.nodeValue.get_monitor() === 0));
+        const mon = {HERE};
         const fmt = (n) => n.nodeType === "WINDOW" ? `w${{n.nodeValue.get_id() % 1000}}`
             : `${{n.layout}}[${{n.childNodes.map(fmt).join(", ")}}]`;
-        return mon ? fmt(mon) : "(no windows)"; }})()""")
+        return mon && mon.childNodes.length ? fmt(mon) : "(no windows)"; }})()""")
 
 
-def timeline_problems(log, tol=30):
+def timeline_problems(log, tol=30, ignore=None):
     """Check every sample of a hold_keys()/drag_edge() timeline: windows must not overlap each
     other or leave the work area by more than `tol` px while the input is still going on.
-    (`tol` allows for Wayland showing a new position a frame or two before the new size.)"""
+    (`tol` allows for Wayland showing a new position a frame or two before the new size.)
+    `ignore`: a window id whose own position is not checked, i.e. the window being dragged with
+    the mouse, which follows the pointer (GNOME owns it until the button is released)."""
     area = js("""(() => { const a = global.workspace_manager.get_active_workspace().get_work_area_for_monitor(0);
         return [a.x, a.y, a.width, a.height]; })()""")
     ax, ay, aw, ah = area
     worst = {}
     for line in log:
-        wins = {k: v for k, v in parse_line(line).items() if k != "calls"}
+        wins = {k: v for k, v in parse_line(line).items() if k != "calls" and k != (ignore or 0) % 1000}
         tag = line.split(" | ")[0][:40]
         for wid, w in wins.items():
             out = max(ax - w["x"], ay - w["y"], w["x"] + w["w"] - (ax + aw), w["y"] + w["h"] - (ay + ah))
@@ -325,9 +368,53 @@ def timeline_problems(log, tol=30):
     return probs
 
 
-def timeline_check(name, what, log):
-    probs = timeline_problems(log)
+def timeline_check(name, what, log, ignore=None):
+    probs = timeline_problems(log, ignore=ignore)
     print(f"  {'PASS' if not probs else 'FAIL'}  {name}: {what}")
     for p in probs:
         print(f"          - {p}")
+    if probs:
+        # the trajectory of every window involved, for diagnosis
+        ids = {int(t) for p in probs for t in p.replace("(", " ").split() if t.isdigit() and len(t) <= 3}
+        for wid in sorted(ids):
+            rows = []
+            for line in log:
+                w = parse_line(line).get(wid)
+                if w:
+                    rows.append(f"{line.split(' ')[0]}:{w['x']:.0f},{w['y']:.0f},{w['w']:.0f}x{w['h']:.0f}")
+            print(f"          w{wid} (t:x,y,wxh): " + " ".join(rows))
     return not probs
+
+
+def ensure_parent_layout(win_id, layout):
+    """Make the container (or monitor) holding `win_id` use `layout` ("HSPLIT"/"VSPLIT"), with
+    Forge's layout toggle. Forge's auto-split picks the direction from the window shape, so it
+    differs between screen sizes; scenarios that need a direction set it with this."""
+    for _ in range(2):
+        if find(windows(), win_id)["playout"] == layout:
+            return
+        js(f"""(() => {{ global.display.list_all_windows().find(w => w.get_id() === {win_id})
+            .activate(global.get_current_time()); return "ok"; }})()""")
+        time.sleep(0.4)
+        js(f'(() => {{ {WM}.command({{name: "LayoutToggle"}}); return "ok"; }})()')
+        time.sleep(1.0)
+    got = find(windows(), win_id)["playout"]
+    if got != layout:
+        raise RuntimeError(f"could not set the layout of {win_id % 1000}'s container to {layout} (got {got})")
+
+
+def close_windows():
+    """Close this workspace's tiled/floating windows one at a time (never the desktop-icons window
+    or other windows Forge does not manage)."""
+    while windows():
+        before = len(windows())
+        wid = windows()[0]["id"]
+        js(f"""(() => {{ global.display.list_all_windows().find(w => w.get_id() === {wid})
+            ?.delete(global.get_current_time()); return "ok"; }})()""")
+        for _ in range(40):
+            time.sleep(0.25)
+            if len(windows()) < before:
+                break
+        else:
+            raise RuntimeError(f"window {wid % 1000} did not close")
+        time.sleep(0.3)

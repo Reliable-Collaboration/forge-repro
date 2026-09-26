@@ -14,8 +14,11 @@ import sys
 sys.path.insert(0, os.path.join(os.path.dirname(os.path.abspath(__file__)), "..", "lib"))
 import harness as h  # noqa: E402
 
-SHRINK_KEYS = {"right": "0xffe3, 0xffe1, 0xffeb, 0x79"}  # Ctrl+Shift+Super+Y: shrink the right edge
-HOLD_MS = 3000   # ~70 repeats of 15 px: far more than the space available
+
+def hold_ms():
+    """Long enough to run out of room on this screen: key repeat adds ~15 px every ~30 ms after a
+    500 ms delay, so ~500 px/s; 1.2 ms per px of screen width is ~2.3x the room there is."""
+    return int(1000 + 1.2 * h.monitor_size()[0])
 
 
 def main():
@@ -24,6 +27,7 @@ def main():
     h.open_editor()
     h.open_editor()
     a, b = sorted(h.windows(), key=lambda w: w["x"])
+    HOLD_MS = hold_ms()
     print(f"layout: [A={a['id'] % 1000} | B={b['id'] % 1000}] side by side (Text Editor: min frame 360x200)")
     r = []
     print("bug: growing a window into a neighbour at its minimum size")
@@ -35,17 +39,21 @@ def main():
     r.append(h.layout_check("3.2", f"hold 'grow left' on B for {HOLD_MS} ms"))
     r.append(h.timeline_check("3.2 (while held)", "no overlap or off-screen while the key repeats", log))
     h.reset_layout()
-    h.drag_edge(a["id"], "right", 1300, steps=40)
-    r.append(h.layout_check("3.3", "drag A's right edge 1300 px to the right"))
+    far = int(0.7 * h.monitor_size()[0])
+    h.drag_edge(a["id"], "right", far, steps=40)
+    r.append(h.layout_check("3.3", f"drag A's right edge {far} px to the right"))
     h.reset_layout()
 
     print("bug: shrinking the focused window past its minimum leaves a gap (shares sum < 100%)")
-    h.hold_keys(a["id"], SHRINK_KEYS["right"], HOLD_MS)
+    h.hold_keys(a["id"], h.SHRINK_KEYS["right"], HOLD_MS)
     r.append(h.layout_check("3.4", f"hold 'shrink right' on A for {HOLD_MS} ms"))
     h.reset_layout()
 
     print("bug, vertical: B above C in a container, grow B's bottom edge into C")
     h.open_app("gnome-text-editor", "--standalone")   # opens next to the focused window
+    con_ids = [w["id"] for w in h.windows() if w["pid"] == "con"]
+    if len(con_ids) == 2:
+        h.ensure_parent_layout(con_ids[0], "VSPLIT")   # auto-split varies with screen size
     ws = h.windows()
     con = sorted([w for w in ws if w["pid"] == "con"], key=lambda w: w["y"])
     if len(con) == 2 and con[0]["playout"] == "VSPLIT":
