@@ -201,3 +201,93 @@ def summary(results):
     print(f"sandbox JS errors: {errs}")
     print(f"RESULT: {sum(results)}/{len(results)} passed")
     return 0 if all(results) and errs == 0 else 1
+
+
+def layout_problems():
+    """Check the tiled layout on monitor 0 and return a list of violations (empty = OK):
+    windows inside the work area, no overlapping windows, each window at the size Forge laid it
+    out at (it isn't when that is below the app's minimum), windows at or above the minimum size
+    their app allows, and each container's percents in (0, 1] summing to 1."""
+    return json.loads(js(f"""(() => {{
+        const wm = {WM};
+        const area = global.workspace_manager.get_active_workspace().get_work_area_for_monitor(0);
+        const probs = [];
+        const nodes = wm.tree.getNodeByType("WINDOW").filter(n => n.nodeValue.get_monitor() === 0 && !n.isFloat());
+        const tag = (n) => n.nodeValue.get_id() % 1000;
+        const frames = nodes.map(n => [n, n.nodeValue.get_frame_rect()]);
+        for (const [n, f] of frames) {{
+            if (f.x < area.x - 1 || f.y < area.y - 1 || f.x + f.width > area.x + area.width + 1 ||
+                f.y + f.height > area.y + area.height + 1)
+                probs.push(`${{tag(n)}} outside the work area: x=${{f.x}} y=${{f.y}} w=${{f.width}} h=${{f.height}}`);
+            const rr = n.renderRect;
+            if (rr && (Math.abs(rr.width - f.width) > 2 || Math.abs(rr.height - f.height) > 2))
+                probs.push(`${{tag(n)}} is ${{f.width}}x${{f.height}} but was laid out at ${{rr.width}}x${{rr.height}}`);
+            const [has, mw, mh] = n.nodeValue.get_min_size();
+            if (has) {{
+                const r = n.nodeValue.get_frame_rect(); r.width = mw; r.height = mh;
+                const m = n.nodeValue.client_rect_to_frame_rect(r);
+                if (f.width < m.width - 1 || f.height < m.height - 1)
+                    probs.push(`${{tag(n)}} below its minimum ${{m.width}}x${{m.height}}: ${{f.width}}x${{f.height}}`);
+            }}
+        }}
+        for (let i = 0; i < frames.length; i++) for (let j = i + 1; j < frames.length; j++) {{
+            const [a, fa] = frames[i], [b, fb] = frames[j];
+            const ox = Math.min(fa.x + fa.width, fb.x + fb.width) - Math.max(fa.x, fb.x);
+            const oy = Math.min(fa.y + fa.height, fb.y + fb.height) - Math.max(fa.y, fb.y);
+            // windows in the same tabbed/stacked container share its area by design
+            const group = (n) => {{ for (let p = n.parentNode; p; p = p.parentNode)
+                if (p.layout === "TABBED" || p.layout === "STACKED") return p; return null; }};
+            if (group(a) && group(a) === group(b)) continue;
+            if (ox > 2 && oy > 2) probs.push(`${{tag(a)}} and ${{tag(b)}} overlap by ${{ox}}x${{oy}}`);
+        }}
+        const parents = new Set(nodes.map(n => n.parentNode));
+        for (const n of nodes) for (let p = n.parentNode; p && p.nodeType !== "ROOT"; p = p.parentNode) parents.add(p);
+        for (const p of parents) {{
+            if (!p || !(p.layout === "HSPLIT" || p.layout === "VSPLIT")) continue;
+            const kids = wm.tree.getTiledChildren(p.childNodes);
+            if (kids.length < 2) continue;
+            const pcts = kids.map(k => k.percent ?? 0);
+            if (pcts.some(v => v <= 0)) continue;   // unset percents = equal split
+            if (pcts.some(v => v > 1)) probs.push(`${{p.layout}} child percent over 100%: ${{pcts.map(v => v.toFixed(3))}}`);
+            const sum = pcts.reduce((s, v) => s + v, 0);
+            if (Math.abs(sum - 1) > 0.02) probs.push(`${{p.layout}} percents sum to ${{sum.toFixed(3)}}: ${{pcts.map(v => v.toFixed(3))}}`);
+        }}
+        return JSON.stringify(probs); }})()"""))
+
+
+def reset_layout():
+    """Back to an equal split everywhere on monitor 0 and re-render."""
+    js(f"""(() => {{ const wm = {WM};
+        wm.tree.getNodeByType("WINDOW").forEach(n => wm.tree.resetSiblingPercent(n.parentNode));
+        wm.tree.getNodeByType("CON").forEach(n => wm.tree.resetSiblingPercent(n.parentNode));
+        wm.renderTree("forge-repro-reset"); return "ok"; }})()""")
+    time.sleep(1.0)
+
+
+def layout_check(name, what):
+    """PASS if layout_problems() is empty after the layout has settled."""
+    time.sleep(1.5)
+    probs = layout_problems()
+    print(f"  {'PASS' if not probs else 'FAIL'}  {name}: {what}")
+    for p in probs:
+        print(f"          - {p}")
+    return not probs
+
+
+def set_forge_setting(key, value):
+    """Set a Forge setting inside the sandbox. Returns False if this Forge build has no such key
+    (setting an unknown GSettings key would abort the shell, so this checks first)."""
+    kind = "boolean" if isinstance(value, bool) else "uint" if isinstance(value, int) else "string"
+    return js(f"""(() => {{ const s = {WM}.ext.settings;
+        if (!s.settings_schema.has_key("{key}")) return false;
+        s.set_{kind}("{key}", {json.dumps(value)}); return true; }})()""")
+
+
+def tree_summary():
+    """Monitor 0's tiling tree as a compact string, e.g. HSPLIT[w12, TABBED[w13, w14]]."""
+    return js(f"""(() => {{ const wm = {WM};
+        const mon = wm.tree.getNodeByType("MONITOR").find(m => m.getNodeByType("WINDOW")
+            .some(w => w.nodeValue.get_monitor() === 0));
+        const fmt = (n) => n.nodeType === "WINDOW" ? `w${{n.nodeValue.get_id() % 1000}}`
+            : `${{n.layout}}[${{n.childNodes.map(fmt).join(", ")}}]`;
+        return mon ? fmt(mon) : "(no windows)"; }})()""")

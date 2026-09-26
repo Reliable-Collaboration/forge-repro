@@ -24,8 +24,8 @@ def drag(name, win, side, nb, delta):
     return h.settle_check(name, win["id"], side, nb["id"], e + delta)
 
 
-def hold(name, win, side, nb):
-    log = h.hold_keys(win["id"], h.GROW_KEYS[side])
+def hold(name, win, side, nb, hold_ms=1000):
+    log = h.hold_keys(win["id"], h.GROW_KEYS[side], hold_ms)
     rel = h.parse_line(next(l for l in log if "keys released" in l))
     w = rel[win["id"] % 1000]
     size_rel = w["w"] if side in h.HORIZONTAL else w["h"]
@@ -161,7 +161,9 @@ def main():
     r.append(drag("1.3", b, s_ba, a, grow_ba))
     r.append(drag("1.4", b, s_ba, a, -grow_ba // 2))
     print("control: held grow shortcut, SAME container (B toward C)")
-    r.append(hold("1.5", b, s_bc, c))
+    # 500 ms stays within the room C has above its minimum height; a longer hold would (correctly,
+    # since the issue 3 fix) stop at C's minimum and no longer measure what this test is about.
+    r.append(hold("1.5", b, s_bc, c, 500))
     print("bug (#532): held grow shortcut, DIFFERENT container (B toward A)")
     r.append(hold("1.6", b, s_ba, a))
     print("no regression: separate taps, DIFFERENT container (B toward A)")

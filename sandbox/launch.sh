@@ -1,16 +1,24 @@
 #!/usr/bin/env bash
-# Start an isolated nested GNOME Shell (devkit viewer window) running Forge built from $FORGE_SRC.
+# Start an isolated nested GNOME Shell running Forge built from $FORGE_SRC.
 #
 # Isolation: the nested shell gets its own D-Bus session bus (dbus-run-session), its own
 # extensions directory (XDG_DATA_HOME) and keyfile-backed settings (GSETTINGS_BACKEND=keyfile),
 # so the host session's dconf and extensions are never touched.
 #
-#   sandbox/launch.sh [WxH]     default 1920x1080: an extra fixed-size virtual monitor (monitor 0)
-#                               used by the scenarios. The devkit viewer shows its own monitor;
-#                               do NOT disable that monitor (the nested shell exits if you do).
+#   sandbox/launch.sh [WxH]     default 1920x1080: the fixed-size virtual monitor (monitor 0)
+#                               the scenarios run on. To watch it live: sandbox/watch.py &
+#   SANDBOX_BACKEND=devkit sandbox/launch.sh
+#                               also open the Mutter devkit viewer (needs mutter-dev-bin). It
+#                               shows an extra monitor, not the test monitor; do NOT disable that
+#                               monitor (the nested shell exits if you do).
 set -euo pipefail
 source "$(dirname "$0")/env.sh"
 SIZE=${1:-1920x1080}
+# SANDBOX_BACKEND=headless (default): no window of its own; watch it with sandbox/watch.py.
+# SANDBOX_BACKEND=devkit: also opens the Mutter devkit viewer, which shows a second monitor
+# whose size follows the viewer window (the scenarios still run on the fixed-size monitor 0).
+BACKEND=${SANDBOX_BACKEND:-headless}
+[[ $BACKEND == headless || $BACKEND == devkit ]] || { echo "SANDBOX_BACKEND must be headless or devkit"; exit 1; }
 
 for _ in $(seq 20); do [[ -z $(sandbox_pids) ]] && break; sleep 0.5; done
 [[ -z $(sandbox_pids) ]] || { echo "sandbox already running (pid $(sandbox_pids))"; exit 1; }
@@ -37,7 +45,7 @@ gsettings set org.gnome.shell welcome-dialog-last-shown-version '999'
 
 setsid dbus-run-session -- bash -c '
   echo "$DBUS_SESSION_BUS_ADDRESS" > "'"$SANDBOX_DIR"'/bus-address"
-  exec gnome-shell --wayland --devkit --virtual-monitor '"$SIZE"' \
+  exec gnome-shell --wayland --'"$BACKEND"' --virtual-monitor '"$SIZE"' \
        --wayland-display '"$SANDBOX_DISPLAY"'
 ' > "$SANDBOX_DIR/nested.log" 2>&1 < /dev/null &
 
