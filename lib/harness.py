@@ -88,7 +88,9 @@ def open_app(*argv, timeout=10, log=None):
         if len(windows()) > before:
             time.sleep(1.0)
             return
-    raise RuntimeError(f"{argv[0]} window did not appear")
+    # Say what is on screen instead (e.g. an app's error or "already running" dialog)
+    shown = js("""JSON.stringify(global.display.list_all_windows().map(w => `${w.get_wm_class()}: ${w.get_title()}`))""")
+    raise RuntimeError(f"{argv[0]} window did not appear within {timeout} s; windows: {shown}")
 
 
 def open_editor():
