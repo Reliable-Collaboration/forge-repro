@@ -121,19 +121,19 @@ RESULT: 8/12 passed
 
 | Scenario | What it checks | Bug / PR |
 |---|---|---|
-| `01_cross_container_snapback.py` | Mouse drags and held resize shortcuts against a neighbour in **another container** keep their size | \<issue C\>, #532 |
-| `02_keyboard_resize_edge.py` | "Grow bottom/top" shortcuts move the bottom/top edge, not the opposite one | \<issue A\> |
-| `03_resize_bounds.py` | A resize **stops at the neighbour's minimum size**, also while a key is held and with a slow app | \<issue D\> |
+| `01_cross_container_snapback.py` | Mouse drags and held resize shortcuts against a neighbour in **another container** keep their size | #545, #532 |
+| `02_keyboard_resize_edge.py` | "Grow bottom/top" shortcuts move the bottom/top edge, not the opposite one | #543 |
+| `03_resize_bounds.py` | A resize **stops at the neighbour's minimum size**, also while a key is held and with a slow app | #546 |
 | `04_min_size_layout.py` | Windows keep their **minimum size** when the space shrinks, and a later resize doesn't drift | #117, #271 |
-| `06_stale_tab_bar.py` | No tab bar is left behind when a tab group's windows close together, move out, or it's switched back to a split | \<issue F\> |
+| `06_stale_tab_bar.py` | No tab bar is left behind when a tab group's windows close together, move out, or it's switched back to a split | #548 |
 | `07_real_apps.py` | Checks 01–03 with real apps (Ptyxis, Files, VS Code), in the layout Forge builds by itself and the other direction | |
-| `08_nested_same_direction.py` | Resizing a window's outer edge leaves its sibling alone in `HSPLIT[A, HSPLIT[B, C]]` (mouse and keyboard) | \<issue E\> |
+| `08_nested_same_direction.py` | Resizing a window's outer edge leaves its sibling alone in `HSPLIT[A, HSPLIT[B, C]]` (mouse and keyboard) | #547 |
 | `09_fuzz.py` | **Randomized stress test**: random actions, the layout rules checked after each one | finds new bugs |
-| `10_performance.py` | Timings of Forge's hot paths, and the window move requests it sends (none should be redundant) | \<perf PR\> |
-| `11_slow_app.py` | A slow app's window is resized, not slid sideways, during a held resize shortcut | \<issue B\> |
+| `10_performance.py` | Timings of Forge's hot paths, and the window move requests it sends (none should be redundant) | #558 |
+| `11_slow_app.py` | A slow app's window is resized, not slid sideways, during a held resize shortcut | #544 |
 | `12_monitors_x11.py` | Moving a window to another monitor and back, maximize/unmaximize, an X11 app (second monitor) | regression checks |
 | `13_overflow_policy.py` | Proposal: tabs or a stack when windows can't all get their minimum size (skipped on builds without it) | not a fix yet |
-| `14_move_out_shares.py` | Moving a window out of its container keeps the size shares at 100% (no gap, nothing off-screen) | \<issue G\> |
+| `14_move_out_shares.py` | Moving a window out of its container keeps the size shares at 100% (no gap, nothing off-screen) | #549 |
 | `15_render_on_changes.py` | Forge still puts windows back after an app resizes its own window, or after a maximized window is restored | guard: renders still put windows back |
 
 `09_fuzz.py --seed N --steps M` is deterministic for a given seed (default 303, so suite runs are
