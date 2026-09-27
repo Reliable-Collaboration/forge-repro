@@ -230,6 +230,12 @@ This harness is designed to be run end to end by a coding agent without a person
   pace. Judge "during the action" with the timeline checks (30 px tolerance), and the final state
   with `layout_check` after it settles.
 
+## Real-session runs
+
+`realsession/run.py` runs scenarios in the GNOME session you're logged into, to confirm a fix on
+real hardware. It needs a small bridge extension that puts the shell in unsafe mode only during
+the run. Read `realsession/README.md` first: it's a security trade-off.
+
 ## Limitations
 
 - GNOME Shell 50+ only. Older versions may work for the checks but lack `get_min_size()`.
