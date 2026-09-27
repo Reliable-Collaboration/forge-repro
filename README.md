@@ -129,11 +129,12 @@ RESULT: 8/12 passed
 | `07_real_apps.py` | Checks 01–03 with real apps (Ptyxis, Files, VS Code), in the layout Forge builds by itself and the other direction | |
 | `08_nested_same_direction.py` | Resizing a window's outer edge leaves its sibling alone in `HSPLIT[A, HSPLIT[B, C]]` (mouse and keyboard) | \<issue E\> |
 | `09_fuzz.py` | **Randomized stress test**: random actions, the layout rules checked after each one | finds new bugs |
-| `10_performance.py` | Timings of Forge's hot paths, and the window move requests it sends (none should be redundant) | \<perf PR\> |
+| `10_performance.py` | Timings of Forge's hot paths, and the window move requests it sends (none should be redundant) | \<perf PRs\> |
 | `11_slow_app.py` | A slow app's window is resized, not slid sideways, during a held resize shortcut | \<issue B\> |
 | `12_monitors_x11.py` | Moving a window to another monitor and back, maximize/unmaximize, an X11 app (second monitor) | regression checks |
 | `13_overflow_policy.py` | Proposal: tabs or a stack when windows can't all get their minimum size (skipped on builds without it) | not a fix yet |
 | `14_move_out_shares.py` | Moving a window out of its container keeps the size shares at 100% (no gap, nothing off-screen) | \<issue G\> |
+| `15_render_on_changes.py` | Forge still puts windows back after an app resizes its own window, or after a maximized window is restored | guard for \<perf PR\> |
 
 `09_fuzz.py --seed N --steps M` is deterministic for a given seed (default 303, so suite runs are
 repeatable); `--seed random` explores. When a step breaks a rule, it stops and prints the steps so
