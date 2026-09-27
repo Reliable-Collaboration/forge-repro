@@ -101,6 +101,12 @@ class Fuzzer:
         delta = self.rng.choice([-400, -150, -40, 40, 150, 400])
         if win.get("float"):
             return f"(skip drag of floating {tag})", None
+        # An edge on the screen edge has nothing to resize against, and the press point just
+        # outside it is on a panel or dock (clicking the Ubuntu dock's icon minimizes the app)
+        ax, ay, aw, ah = h.work_area()
+        bound = {"left": ax, "top": ay, "right": ax + aw, "bottom": ay + ah}[side]
+        if abs(h.edge(win, side) - bound) <= h.gap() + h.GAP_TOL:
+            return f"(skip drag of {tag}'s {side} edge: it's on the screen edge)", None
         _, grabbed, log = h.drag_edge(wid, side, delta)
         # the window GNOME grabbed (edges coincide in stacked/tabbed groups, so it may be another)
         grab = next((l for l in log if "SIGNAL grab-op-begin" in l), "")

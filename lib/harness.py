@@ -233,10 +233,15 @@ GROW_KEYS = _GrowKeys()
 SHRINK_KEYS = _ShrinkKeys()
 
 
+def work_area():
+    """(x, y, width, height) of monitor 0's work area (the screen minus panels and docks)."""
+    return tuple(js("""(() => { const a = global.workspace_manager.get_active_workspace()
+        .get_work_area_for_monitor(0); return [a.x, a.y, a.width, a.height]; })()"""))
+
+
 def monitor_size():
     """(width, height) of monitor 0's work area."""
-    return tuple(js("""(() => { const a = global.workspace_manager.get_active_workspace()
-        .get_work_area_for_monitor(0); return [a.width, a.height]; })()"""))
+    return work_area()[2:]
 
 
 def hold_keys(win_id, keys, hold_ms=1000, during=None):
@@ -337,7 +342,7 @@ def layout_problems():
         const wm = {WM};
         const area = global.workspace_manager.get_active_workspace().get_work_area_for_monitor(0);
         const probs = [];
-        const nodes = ({HERE}?.getNodeByType("WINDOW") ?? []).filter(n => !n.isFloat());
+        const nodes = ({HERE}?.getNodeByType("WINDOW") ?? []).filter(n => !n.isFloat() && !n.nodeValue.minimized);   // Forge doesn't tile minimized windows
         const tag = (n) => n.nodeValue.get_id() % 1000;
         const frames = nodes.map(n => [n, n.nodeValue.get_frame_rect()]);
         for (const [n, f] of frames) {{
