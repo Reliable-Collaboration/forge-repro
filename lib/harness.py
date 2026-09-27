@@ -21,6 +21,10 @@ LIB = os.path.join(ROOT, "lib")
 SANDBOX_DIR = os.environ.get("SANDBOX_DIR") or os.path.join(
     os.environ.get("XDG_CACHE_HOME") or os.path.expanduser("~/.cache"), "forge-repro", "sandbox")
 
+# Real-session mode, set only by realsession/run.py while the test bridge is on: talk to the GNOME
+# Shell of the session you are logged into, instead of a sandbox. Everything else stays the same.
+REAL_SESSION = os.environ.get("FORGE_TEST_REAL_SESSION") == "1"
+
 TOL = 10      # px allowed between an edge's position at release and where it settles
 GAP_TOL = 4   # px allowed between the space between two windows and Forge's gap
 WM = 'Main.extensionManager.lookup("forge@jmmaranan.com").stateObj.extWm'
@@ -33,6 +37,8 @@ _bus = None
 
 def bus():
     global _bus
+    if _bus is None and REAL_SESSION:
+        _bus = Gio.bus_get_sync(Gio.BusType.SESSION, None)
     if _bus is None:
         addr = open(os.path.join(SANDBOX_DIR, "bus-address")).read().strip()
         if not addr.startswith("unix:path=/tmp/dbus-"):
@@ -81,7 +87,8 @@ def open_app(*argv, timeout=10, log=None):
     park_pointer()
     before = len(windows())
     out = open(log, "a") if log else subprocess.DEVNULL
-    subprocess.Popen([os.path.join(ROOT, "sandbox", "run-in-sandbox.sh"), *argv],
+    launcher = [] if REAL_SESSION else [os.path.join(ROOT, "sandbox", "run-in-sandbox.sh")]
+    subprocess.Popen([*launcher, *argv],
                      stdout=out, stderr=out, stdin=subprocess.DEVNULL, start_new_session=True)
     for _ in range(int(timeout * 4)):
         time.sleep(0.25)
@@ -138,7 +145,12 @@ def neighbour_side(a, b):
 def js_error_entries():
     """The Forge JS ERROR entries in the sandbox log (message + stack), as text blocks."""
     try:
-        lines = open(os.path.join(SANDBOX_DIR, "nested.log"), errors="replace").read().splitlines()
+        if REAL_SESSION:   # the session's journal since the run started
+            lines = subprocess.run(["journalctl", "--user", "-o", "cat", "--since",
+                                    "@" + os.environ["FORGE_TEST_SINCE"]],
+                                   capture_output=True, text=True).stdout.splitlines()
+        else:
+            lines = open(os.path.join(SANDBOX_DIR, "nested.log"), errors="replace").read().splitlines()
     except FileNotFoundError:
         return []
     entries = []

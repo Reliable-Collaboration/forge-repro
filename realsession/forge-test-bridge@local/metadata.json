@@ -1,0 +1,6 @@
+{
+  "uuid": "forge-test-bridge@local",
+  "name": "Forge test bridge",
+  "description": "REAL-SESSION TEST RUNS ONLY: while enabled, GNOME Shell runs in unsafe mode so the forge-repro harness can use org.gnome.Shell.Eval. Keep it disabled; realsession/run.sh enables it for the duration of a test run and disables it afterwards.",
+  "shell-version": ["50"]
+}
