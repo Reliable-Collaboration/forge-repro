@@ -16,6 +16,7 @@ Don't use the mouse or keyboard while it runs: the scenarios drive a virtual mou
 Needs the bridge installed in ~/.local/share/gnome-shell/extensions (see realsession/README.md)
 and loaded by the running shell (log out and in once after installing it).
 """
+import json
 import os
 import signal
 import subprocess
@@ -55,9 +56,9 @@ def unsafe_mode():
 
 
 def window_ids_on(ws_index):
-    return h.js(f"""JSON.stringify(global.display.list_all_windows()
+    return json.loads(h.js(f"""JSON.stringify(global.display.list_all_windows()
         .filter(w => !w.is_skip_taskbar() && w.get_workspace()?.index() === {ws_index} && !w.is_on_all_workspaces())
-        .map(w => w.get_id()))""")
+        .map(w => w.get_id()))"""))
 
 
 def activate_workspace(index):
