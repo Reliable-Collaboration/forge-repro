@@ -5,10 +5,13 @@ Driven with Forge's own shortcuts (Super+Shift+S stacked, Super+Shift+T tabbed, 
 
   17.1  stacking a container and toggling it back keeps its split direction (VSPLIT stays VSPLIT)
   17.2  the same for tabs
-  17.3  in a stack, every window can be seen: with focus on the first window, each other window
-        still shows a strip (i3-style stacks show every title); none is hidden entirely
+  17.3  in a stack, every window can be found: with focus on the first window, the stack shows a
+        title list with one row per window, the focused window is on top, and no window covers
+        the list (i3-style); none is hidden without a trace
   17.4  switching from a stack to a tab group and back leaves no empty tab bar behind
   17.5  moving focus into a stack from outside returns to the window last used there (#230)
+  17.6  clicking a window's row in a stack's title list focuses that window
+  17.7  the same as 17.5 for a tab group
 
 Run on a fresh sandbox:  sandbox/launch.sh && scenarios/17_stack_tab_switching.py
 """
@@ -73,7 +76,7 @@ def column(n):
     return a, ws
 
 
-def visible_strip(wid):
+def visible_strip(wid):  # noqa: kept for diagnostics
     """Rows of the window that no other window covers (px): 0 means hidden entirely."""
     return h.js(f"""(() => {{
         const ws = global.workspace_manager.get_active_workspace();
@@ -91,6 +94,28 @@ def visible_strip(wid):
         }}
         return Math.max(0, bottom - top);
     }})()""")
+
+
+def title_list(con_wid):
+    """The shown title bar of the group holding `con_wid`: rows (tabs) and rect, or None."""
+    return json.loads(h.js(f"""JSON.stringify((() => {{
+        const n = {h.WM}.tree.getNodeByType("WINDOW").find(n => n.nodeValue.get_id() === {con_wid});
+        const d = n.parentNode.decoration;
+        if (!d || !d.visible || d.width === 0 || d.height === 0) return null;
+        const rows = d.get_children().filter(c => c.visible).map(c => {{
+            const [x, y] = c.get_transformed_position(); return [Math.round(x), Math.round(y), Math.round(c.width), Math.round(c.height)]; }});
+        const [x, y] = d.get_transformed_position();
+        return {{rows, rect: [Math.round(x), Math.round(y), Math.round(d.width), Math.round(d.height)]}};
+    }})())"""))
+
+
+def click(x, y):
+    h.js(f"""(() => {{ const dev = global.stage.context.get_backend().get_default_seat().create_virtual_device(0);
+        const t = GLib.get_monotonic_time();
+        dev.notify_absolute_motion(t, {x}, {y}); dev.notify_button(t + 1000, 1, 1); dev.notify_button(t + 2000, 1, 0);
+        return "ok"; }})()""")
+    time.sleep(1.0)
+    h.settle()
 
 
 def done():
@@ -122,20 +147,37 @@ def main():
     key("con-stacked-layout-toggle")
     order = group_of(ws[0]["id"])[1]
     activate(order[0])
-    strips = {i % 1000: visible_strip(i) for i in order}
-    ok = all(v > 0 for v in strips.values())
-    print(f"  {'PASS' if ok else 'FAIL'}  17.3: stack of {len(order)}, focus on the first: visible rows per window {strips}")
+    tl = title_list(order[0])
+    rows = len(tl["rows"]) if tl else 0
+    top = h.js("""global.display.sort_windows_by_stacking(global.display.list_all_windows()
+        .filter(w => w.get_workspace() === global.workspace_manager.get_active_workspace())).at(-1).get_id()""")
+    list_bottom = tl["rect"][1] + tl["rect"][3] if tl else None
+    covering = [w["id"] % 1000 for w in h.windows() if tl and w["id"] in order and w["y"] < list_bottom - 2]
+    ok = rows == len(order) and top == order[0] and not covering
+    print(f"  {'PASS' if ok else 'FAIL'}  17.3: stack of {len(order)}, focus on the first: title list rows {rows}, "
+          f"focused on top: {top == order[0]}, windows over the list: {covering}")
     r.append(ok)
+    if tl and rows == len(order):
+        x, y, w, hh = tl["rows"][2]                      # the third window's row
+        click(x + w // 2, y + hh // 2)
+        ok = focus() == order[2]
+        print(f"  {'PASS' if ok else 'FAIL'}  17.6: click the third row: focus {focus() % 1000} (expected {order[2] % 1000})")
+    else:
+        ok = False
+        print("  FAIL  17.6: no title list to click")
+    r.append(ok)
+    activate(order[0])
 
     key("con-tabbed-layout-toggle")
     key("con-stacked-layout-toggle")
     bars = json.loads(h.js(f"""JSON.stringify(global.window_group.get_children()
         .filter(c => c.type === "forge-deco" && c.visible && c.width > 0 && c.height > 0)
         .map(c => [c.get_n_children(), {h.WM}.tree.getNodeByType("CON").includes(c.parentNode) ? c.parentNode.layout : "gone"]))"""))
-    stray = [b for b in bars if b[1] != "TABBED"]
+    # A bar is right on a tab or stack group that shows rows (a stack's title list is one too);
+    # stray if its container is gone, is no group, or the bar is empty
+    stray = [b for b in bars if b[1] not in ("TABBED", "STACKED") or b[0] == 0]
     ok = not stray
-    print(f"  {'PASS' if ok else 'FAIL'}  17.4: stacked -> tabbed -> stacked: tab bars left that belong to no tabbed "
-          f"group: {stray}")
+    print(f"  {'PASS' if ok else 'FAIL'}  17.4: stacked -> tabbed -> stacked: stray or empty tab bars left: {stray}")
     r.append(ok)
 
     order = group_of(ws[0]["id"])[1]
@@ -146,6 +188,16 @@ def main():
     ok = left_ok and focus() == order[0]
     print(f"  {'PASS' if ok else 'FAIL'}  17.5: focus the stack's first window, Super+H, Super+L: back on "
           f"{focus() % 1000} (expected {order[0] % 1000}, the window last used there)")
+    r.append(ok)
+
+    key("con-tabbed-layout-toggle")          # the same group as tabs
+    order = group_of(ws[0]["id"])[1]
+    activate(order[1])                       # use the middle tab
+    activate(a["id"])                        # then A (a click)
+    key("window-focus-right")                # back into the group
+    ok = focus() == order[1]
+    print(f"  {'PASS' if ok else 'FAIL'}  17.7: tab group: last used the middle tab, then A, Super+L: back on "
+          f"{focus() % 1000} (expected {order[1] % 1000})")
     r.append(ok)
     sys.exit(h.summary(r))
 
