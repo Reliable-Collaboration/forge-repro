@@ -224,9 +224,58 @@ def tab_edge(name):
     shots.shot(path("16", name, "after"))
 
 
+def _column_of(n):
+    """A | CON[w1..wn] with the container split vertically; returns (A, [w1..wn])."""
+    h.set_forge_setting("auto-split-enabled", False)
+    ptyxis()
+    editor()
+    a, first = sorted(h.windows(), key=lambda w: w["x"])
+    focus_command(first["id"], '{name: "Split", orientation: "vertical"}')
+    ws = [first]
+    for _ in range(n - 1):
+        known = {w["id"] for w in h.windows()}
+        h.js(f"""(() => {{ global.display.list_all_windows().find(w => w.get_id() === {ws[-1]["id"]})
+            .activate(global.get_current_time()); return "ok"; }})()""")
+        time.sleep(0.5)
+        editor()
+        ws.append(next(w for w in h.windows() if w["id"] not in known))
+    h.ensure_parent_layout(first["id"], "VSPLIT")
+    h.settle()
+    return a, ws
+
+
+def _tap(binding, wid):
+    h.hold_keys(wid, h.chord(binding), 0)
+    time.sleep(1.2)
+    h.settle()
+
+
+def toggle_direction(name):
+    """Issue I: two windows above each other, Super+Shift+S twice."""
+    a, ws = _column_of(2)
+    shots.shot(path("18", name, "before"))
+    _tap("con-stacked-layout-toggle", ws[0]["id"])
+    _tap("con-stacked-layout-toggle", ws[0]["id"])
+    shots.shot(path("18", name, "after"))
+
+
+def stack_hidden(name):
+    """Issue K: a stack of three windows, focus on the first."""
+    a, ws = _column_of(3)
+    _tap("con-stacked-layout-toggle", ws[0]["id"])
+    order = __import__("json").loads(h.js(f"""JSON.stringify({h.WM}.tree.getNodeByType("WINDOW")
+        .find(n => n.nodeValue.get_id() === {ws[0]["id"]}).parentNode.childNodes.map(c => c.nodeValue.get_id()))"""))
+    h.js(f"""(() => {{ global.display.list_all_windows().find(w => w.get_id() === {order[0]})
+        .activate(global.get_current_time()); return "ok"; }})()""")
+    time.sleep(1.2)
+    h.settle()
+    shots.shot(path("19", name, "after"))
+
+
 SHOTS = {"1": cross_container_drag, "532": held_key_cross_container, "2": wrong_edge, "3": past_minimum,
          "4": min_size_fits, "6": stale_tab_bar, "7": nested_same_direction, "9": slow_app,
-         "14": move_out, "16": tab_edge}
+         "14": move_out, "16": tab_edge,
+         "18": toggle_direction, "19": stack_hidden}
 
 # Captions for the composed before/after images: (moment, caption on main, caption with the fix)
 COMPOSE = {
@@ -241,6 +290,8 @@ COMPOSE = {
     "6": [("after", "main: tab bar left behind", "fix: gone")],
     "7": [("after", "without fix: the right window grew too", "fix: only the dragged edge moved")],
     "14": [("after", "main: after move up - a gap, and the window runs off-screen", "fix: the windows share the row")],
+    "18": [("after", "main: after Super+Shift+S twice - side by side", "fix: back to one above the other")],
+    "19": [("after", "main: stack of 3, first focused - the others vanish", "fix: a title list shows all three")],
     "16": [("after", "before: dragged the 2nd tab's edge - snapped back", "fix: the border stays where it was let go")],
     "9": [("after-resume", "main: app resumed, window still shifted", "fix: app resumed, window in place")],
 }
