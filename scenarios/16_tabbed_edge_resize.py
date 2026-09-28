@@ -15,6 +15,8 @@ next to a column of terminals).
   16.4  stacked group below a window, last window visible: drag its top edge
   16.5  the real-session shape: VSPLIT[A, E] | TABBED[B, C, D], second tab visible, left edge
   16.6  a tab that is itself a split: A | TABBED[C, HSPLIT[B, B2]], B's left edge
+  16.7  a split inside a stacked group, dragged on its top edge: X over STACKED[W, VSPLIT[P, Q]];
+        the P | Q border must not move (the split is smaller than the group by the headers)
 
 Run on a fresh sandbox:  sandbox/launch.sh && scenarios/16_tabbed_edge_resize.py
 """
@@ -118,6 +120,24 @@ def main():
     activate(b["id"])
     print(f"layout: {h.tree_summary()}")
     r.append(drag_check("16.6", b["id"], "left", -200, a["id"]))
+    done()
+
+    x = new_window()
+    w = new_window()
+    h.ensure_parent_layout(x["id"], "VSPLIT")
+    command(w["id"], '{name: "Split", orientation: "vertical"}')
+    p = new_window()                                   # VSPLIT[X, VSPLIT[W, P]]
+    command(p["id"], '{name: "Split", orientation: "vertical"}')
+    q = new_window()                                   # VSPLIT[X, VSPLIT[W, VSPLIT[P, Q]]]
+    command(w["id"], '{name: "LayoutStackedToggle"}')
+    activate(p["id"])
+    print(f"layout: {h.tree_summary()}")
+    q_before = h.find(h.windows(), q["id"])["h"]
+    r.append(drag_check("16.7", p["id"], "top", -150, x["id"]))
+    q_after = h.find(h.windows(), q["id"])["h"]
+    ok = abs(q_after - q_before) <= h.TOL
+    print(f"  {'PASS' if ok else 'FAIL'}  16.7 (inside): Q's height {q_before} -> {q_after} (must not change)")
+    r.append(ok)
     sys.exit(h.summary(r))
 
 
