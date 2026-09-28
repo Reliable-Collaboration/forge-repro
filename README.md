@@ -135,6 +135,7 @@ RESULT: 8/12 passed
 | `13_overflow_policy.py` | Proposal: tabs or a stack when windows can't all get their minimum size (skipped on builds without it) | not a fix yet |
 | `14_move_out_shares.py` | Moving a window out of its container keeps the size shares at 100% (no gap, nothing off-screen) | [#549](https://github.com/forge-ext/forge/issues/549) |
 | `15_render_on_changes.py` | Forge still puts windows back after an app resizes its own window, or after a maximized window is restored | guard: renders still put windows back |
+| `16_tabbed_edge_resize.py` | Dragging the edge of a window in a tabbed or stacked group resizes the group, from any of its windows | [#561](https://github.com/forge-ext/forge/issues/561) |
 
 `09_fuzz.py --seed N --steps M` is deterministic for a given seed (default 303, so suite runs are
 repeatable); `--seed random` explores. When a step breaks a rule, it stops and prints the steps so
