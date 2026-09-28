@@ -201,9 +201,32 @@ def focus_command(win_id, cmd):
     time.sleep(1.0)
 
 
+def tab_edge(name):
+    """Issue H: VSPLIT[A, E] | TABBED[B, C, D] with the second tab visible; drag its left edge."""
+    h.set_forge_setting("auto-split-enabled", False)
+    ptyxis()
+    editor()
+    a, b = sorted(h.windows(), key=lambda w: w["x"])
+    focus_command(a["id"], '{name: "Split", orientation: "vertical"}')
+    ptyxis()                                           # E: joins A's column
+    focus_command(b["id"], '{name: "Split", orientation: "horizontal"}')
+    known = {w["id"] for w in h.windows()}
+    editor()
+    c = next(w for w in h.windows() if w["id"] not in known)
+    editor()
+    focus_command(b["id"], '{name: "LayoutTabbedToggle"}')
+    h.js(f"""(() => {{ global.display.list_all_windows().find(w => w.get_id() === {c["id"]})
+        .activate(global.get_current_time()); return "ok"; }})()""")
+    h.settle()
+    h.drag_edge(c["id"], "left", -400, steps=30, step_ms=60,
+                during=shots.later(path("16", name, "during"), 1.6))
+    time.sleep(1.5)
+    shots.shot(path("16", name, "after"))
+
+
 SHOTS = {"1": cross_container_drag, "532": held_key_cross_container, "2": wrong_edge, "3": past_minimum,
          "4": min_size_fits, "6": stale_tab_bar, "7": nested_same_direction, "9": slow_app,
-         "14": move_out}
+         "14": move_out, "16": tab_edge}
 
 # Captions for the composed before/after images: (moment, caption on main, caption with the fix)
 COMPOSE = {
@@ -218,6 +241,7 @@ COMPOSE = {
     "6": [("after", "main: tab bar left behind", "fix: gone")],
     "7": [("after", "without fix: the right window grew too", "fix: only the dragged edge moved")],
     "14": [("after", "main: after move up - a gap, and the window runs off-screen", "fix: the windows share the row")],
+    "16": [("after", "#552 alone: dragged the 2nd tab's edge - snapped back", "fix: the border stays where it was let go")],
     "9": [("after-resume", "main: app resumed, window still shifted", "fix: app resumed, window in place")],
 }
 
