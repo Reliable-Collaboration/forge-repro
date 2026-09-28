@@ -241,7 +241,7 @@ COMPOSE = {
     "6": [("after", "main: tab bar left behind", "fix: gone")],
     "7": [("after", "without fix: the right window grew too", "fix: only the dragged edge moved")],
     "14": [("after", "main: after move up - a gap, and the window runs off-screen", "fix: the windows share the row")],
-    "16": [("after", "#552 alone: dragged the 2nd tab's edge - snapped back", "fix: the border stays where it was let go")],
+    "16": [("after", "before: dragged the 2nd tab's edge - snapped back", "fix: the border stays where it was let go")],
     "9": [("after-resume", "main: app resumed, window still shifted", "fix: app resumed, window in place")],
 }
 
