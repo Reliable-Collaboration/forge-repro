@@ -14,6 +14,7 @@ next to a column of terminals).
   16.3  tabbed group, last tab visible: drag its left edge
   16.4  stacked group below a window, last window visible: drag its top edge
   16.5  the real-session shape: VSPLIT[A, E] | TABBED[B, C, D], second tab visible, left edge
+  16.6  a tab that is itself a split: A | TABBED[C, HSPLIT[B, B2]], B's left edge
 
 Run on a fresh sandbox:  sandbox/launch.sh && scenarios/16_tabbed_edge_resize.py
 """
@@ -104,7 +105,19 @@ def main():
     a, tabs = group("A", "horizontal", "LayoutTabbedToggle", column=True)
     activate(tabs[1]["id"])
     r.append(drag_check("16.5", tabs[1]["id"], "left", -200, a["id"]))
-    print(f"          after: {h.tree_summary()}")
+    done()
+
+    a = new_window()
+    c = new_window()
+    h.ensure_parent_layout(a["id"], "HSPLIT")
+    command(c["id"], '{name: "Split", orientation: "horizontal"}')
+    b = new_window()                                   # HSPLIT[A, HSPLIT[C, B]]
+    command(b["id"], '{name: "Split", orientation: "horizontal"}')
+    new_window()                                       # HSPLIT[A, HSPLIT[C, HSPLIT[B, B2]]]
+    command(c["id"], '{name: "LayoutTabbedToggle"}')
+    activate(b["id"])
+    print(f"layout: {h.tree_summary()}")
+    r.append(drag_check("16.6", b["id"], "left", -200, a["id"]))
     sys.exit(h.summary(r))
 
 
