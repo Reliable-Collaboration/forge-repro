@@ -12,6 +12,9 @@ Driven with Forge's own shortcuts (Super+Shift+S stacked, Super+Shift+T tabbed, 
   17.5  moving focus into a stack from outside returns to the window last used there (#230)
   17.6  clicking a window's row in a stack's title list focuses that window
   17.7  the same as 17.5 for a tab group
+  17.8  the close button on a stack's row closes that window
+  17.9  with title bars turned off (showtab-decoration-enabled), stacks keep the old cascade, no list
+  17.10 if the window last used in a group is closed, focus coming back still lands in the group
 
 Run on a fresh sandbox:  sandbox/launch.sh && scenarios/17_stack_tab_switching.py
 """
@@ -103,7 +106,9 @@ def title_list(con_wid):
         const d = n.parentNode.decoration;
         if (!d || !d.visible || d.width === 0 || d.height === 0) return null;
         const rows = d.get_children().filter(c => c.visible).map(c => {{
-            const [x, y] = c.get_transformed_position(); return [Math.round(x), Math.round(y), Math.round(c.width), Math.round(c.height)]; }});
+            const [x, y] = c.get_transformed_position();
+            return [Math.round(x), Math.round(y), Math.round(c.width), Math.round(c.height),
+                    c.has_style_class_name("window-tabbed-tab-active")]; }});
         const [x, y] = d.get_transformed_position();
         return {{rows, rect: [Math.round(x), Math.round(y), Math.round(d.width), Math.round(d.height)]}};
     }})())"""))
@@ -153,12 +158,15 @@ def main():
         .filter(w => w.get_workspace() === global.workspace_manager.get_active_workspace())).at(-1).get_id()""")
     list_bottom = tl["rect"][1] + tl["rect"][3] if tl else None
     covering = [w["id"] % 1000 for w in h.windows() if tl and w["id"] in order and w["y"] < list_bottom - 2]
-    ok = rows == len(order) and top == order[0] and not covering
+    highlighted = [i for i, row in enumerate(tl["rows"]) if row[4]] if tl else []
+    inside = tl and all(r_[1] + r_[3] <= list_bottom + 1 for r_ in tl["rows"])
+    ok = rows == len(order) and top == order[0] and not covering and highlighted == [0] and inside
     print(f"  {'PASS' if ok else 'FAIL'}  17.3: stack of {len(order)}, focus on the first: title list rows {rows}, "
-          f"focused on top: {top == order[0]}, windows over the list: {covering}")
+          f"focused on top: {top == order[0]}, windows over the list: {covering}, highlighted rows: "
+          f"{highlighted} (expected [0]), rows inside the list: {inside}")
     r.append(ok)
     if tl and rows == len(order):
-        x, y, w, hh = tl["rows"][2]                      # the third window's row
+        x, y, w, hh, _ = tl["rows"][2]                      # the third window's row
         click(x + w // 2, y + hh // 2)
         ok = focus() == order[2]
         print(f"  {'PASS' if ok else 'FAIL'}  17.6: click the third row: focus {focus() % 1000} (expected {order[2] % 1000})")
@@ -199,6 +207,56 @@ def main():
     print(f"  {'PASS' if ok else 'FAIL'}  17.7: tab group: last used the middle tab, then A, Super+L: back on "
           f"{focus() % 1000} (expected {order[1] % 1000})")
     r.append(ok)
+    done()
+
+    # 17.8: close a window from its row
+    a, ws = column(3)
+    activate(ws[0]["id"])
+    key("con-stacked-layout-toggle")
+    order = group_of(ws[0]["id"])[1]
+    tl = title_list(order[0])
+    if tl and len(tl["rows"]) == 3:
+        x, y, w, hh, _ = tl["rows"][1]
+        click(x + w - hh // 2, y + hh // 2)                 # the close button at the row's right end
+        time.sleep(1.0)
+        left = group_of(order[0])[1]
+        ok = order[1] not in left and len(left) == 2
+        print(f"  {'PASS' if ok else 'FAIL'}  17.8: close button on row 2: stack now {[i % 1000 for i in left]} "
+              f"(expected {order[1] % 1000} gone)")
+    else:
+        ok = False
+        print("  FAIL  17.8: no title list")
+    r.append(ok)
+
+    # 17.10: the last-used window of the stack is closed, then focus comes back from A
+    left = group_of(order[0])[1]
+    activate(left[0])
+    activate(a["id"])
+    h.js(f"""(() => {{ global.display.list_all_windows().find(w => w.get_id() === {left[0]})
+        .delete(global.get_current_time()); return "ok"; }})()""")
+    time.sleep(1.5)
+    h.settle()
+    activate(a["id"])
+    key("window-focus-right")
+    ok = focus() in group_of(left[1])[1]
+    print(f"  {'PASS' if ok else 'FAIL'}  17.10: last-used window closed, Super+L from A: focus {focus() % 1000} "
+          f"(expected a window of the stack)")
+    r.append(ok)
+    done()
+
+    # 17.9: title bars off: the old cascade, no list
+    h.set_forge_setting("showtab-decoration-enabled", False)
+    a, ws = column(3)
+    activate(ws[0]["id"])
+    key("con-stacked-layout-toggle")
+    order = group_of(ws[0]["id"])[1]
+    tops = sorted(h.find(h.windows(), i)["y"] for i in order)
+    steps = [b - a_ for a_, b in zip(tops, tops[1:])]
+    ok = title_list(order[0]) is None and len(set(steps)) == 1 and steps[0] > 0
+    print(f"  {'PASS' if ok else 'FAIL'}  17.9: title bars off: list shown: {title_list(order[0]) is not None}, "
+          f"window tops {tops} (a cascade: equal steps)")
+    r.append(ok)
+    h.set_forge_setting("showtab-decoration-enabled", True)
     sys.exit(h.summary(r))
 
 

@@ -109,6 +109,40 @@ PY
 else
   gsettings set org.gnome.shell enabled-extensions "['$FORGE_UUID', 'sandbox-unsafe@local']"
 fi
+# Free GNOME's own shortcuts that clash with Forge's (e.g. Super+H minimizes, Super+L locks),
+# as a Forge setup does; otherwise either one may win a key press. Logged in the launch output.
+python3 - "$SANDBOX_DIR/data/gnome-shell/extensions/$FORGE_UUID/schemas" <<'PY'
+import subprocess, sys
+import gi
+gi.require_version("Gtk", "3.0")
+from gi.repository import Gtk
+schemadir = sys.argv[1]
+def get(args):
+    r = subprocess.run(["gsettings", *args], capture_output=True, text=True)
+    return r.stdout.strip() if r.returncode == 0 else None
+def accels(value):
+    import ast
+    return ast.literal_eval(value.replace("@as ", "")) if value else []
+def norm(a):
+    key, mods = Gtk.accelerator_parse(a)
+    return (key, int(mods)) if key else None
+forge = get(["--schemadir", schemadir, "list-recursively", "org.gnome.shell.extensions.forge.keybindings"]) or ""
+taken = {norm(a) for line in forge.splitlines() for a in accels(line.split(" ", 2)[2]) if norm(a)}
+freed = []
+for schema in ("org.gnome.desktop.wm.keybindings", "org.gnome.mutter.keybindings",
+               "org.gnome.mutter.wayland.keybindings", "org.gnome.shell.keybindings",
+               "org.gnome.settings-daemon.plugins.media-keys"):
+    for line in (get(["list-recursively", schema]) or "").splitlines():
+        _, key, value = line.split(" ", 2)
+        if not value.startswith(("[", "@as")):
+            continue
+        current = accels(value)
+        keep = [a for a in current if norm(a) not in taken]
+        if keep != current:
+            subprocess.run(["gsettings", "set", schema, key, str(keep) if keep else "@as []"], check=True)
+            freed.append(f"{schema.split('.')[-2]}.{key} {sorted(set(current) - set(keep))}")
+print("freed GNOME shortcuts that Forge uses:", "; ".join(freed) or "none")
+PY
 gsettings set org.gnome.mutter dynamic-workspaces false        # forge: no dynamic workspaces
 gsettings set org.gnome.desktop.wm.preferences num-workspaces 4
 gsettings set org.gnome.shell welcome-dialog-last-shown-version '999'
