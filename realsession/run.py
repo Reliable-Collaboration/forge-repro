@@ -31,7 +31,7 @@ FORGE_DCONF = "/org/gnome/shell/extensions/forge/"
 # Scenarios that only open, arrange and close their own windows on the test workspace.
 # Not here: 09 (fuzz: random actions), 10 (moves windows to another workspace), 12 (needs two
 # monitors), 13 (a proposal's setting).
-DEFAULT = ["01", "02", "03", "04", "06", "07", "08", "11", "14", "15", "16"]
+DEFAULT = ["01", "02", "03", "04", "06", "07", "08", "11", "14", "15", "16", "17"]
 
 os.environ["FORGE_TEST_REAL_SESSION"] = "1"
 os.environ["FORGE_TEST_SINCE"] = str(int(time.time()))
