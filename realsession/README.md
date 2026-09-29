@@ -29,5 +29,10 @@ It tests on your **last workspace**, and refuses to start unless that workspace 
 restores your Forge settings after every scenario, never closes a window that existed before the
 run (or one shown on all workspaces), and returns you to the workspace you were on. Don't touch the mouse or keyboard while it runs.
 
+Every scenario runs under the continuous layout watcher, as in the sandbox (`lib/watchdog.js`). An
+overlap or off-screen episode of 250 ms or longer (`WATCH_MAX_MS`) fails the scenario, unless it is
+an app stalling, a mouse resize or a window still opening, which are reported but don't fail. Outputs and watch reports are
+kept in `~/.cache/forge-repro/realsession/<date-time>/`.
+
 Remove the bridge when you no longer need it:
 `rm -r ~/.local/share/gnome-shell/extensions/forge-test-bridge@local`.

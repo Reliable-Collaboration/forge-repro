@@ -39,7 +39,7 @@ It finds the Forge checkout it is part of (`tests/` inside Forge) or a sibling `
 Set `FORGE_SRC=/path/to/forge` to test another checkout or a git worktree.
 
 ```sh
-sandbox/watch.py &                 # optional: a window that shows the test monitor live
+sandbox/watch.py &                 # optional: a window that shows the sandbox's monitors live
 sandbox/run-suite.sh               # build Forge, run every scenario, print a summary;
                                    # exit status 0 = every scenario passed (or was skipped)
 sandbox/run-suite.sh 01 03         # just these scenarios
@@ -114,8 +114,36 @@ RESULT: 8/12 passed
   `harness.timeline_problems()` checks the same while a drag or held key is still in progress,
   from samples taken every 100 ms. It allows 30 px for Wayland applying a new position a frame
   before the new size.
-- **Watching.** `sandbox/watch.py` screencasts the test monitor (Mutter ScreenCast on the sandbox
-  bus → PipeWire → GStreamer) into a window on your desktop, and reconnects to each new sandbox.
+- **Continuous watcher.** `run-suite.sh` runs every scenario under `lib/watchdog.js` (started and
+  read by `sandbox/watchdog.py`). Inside the shell, every frame (16 ms) for the whole scenario, it
+  checks all tiled windows on all monitors: no two overlap (windows of one tabbed/stacked group
+  excepted) and none leaves its monitor's work area. Each violation is an **episode** with a start,
+  duration and worst size, written to `<scenario>.watch.txt` and counted in the summary. It is
+  classified by the places Forge last asked for (`forgePendingFrame`):
+  - `layout`: Forge's own requests overlap, a layout bug;
+  - `lag`: the requests are fine, but an app hasn't taken its new place yet; the report names it.
+  - `stall`: such an app didn't change its frame at all for 450 ms or more (the app was busy);
+  - `drag`: the window out of place is being resized with the mouse (GNOME sizes it, not Forge);
+  - `opening`: a window that hasn't reached any place since it appeared.
+
+  `run-suite.sh` fails a scenario on a `layout` or `lag` episode of `WATCH_MAX_MS` (250) or longer;
+  the other kinds are reported only.
+
+  The report also gives, per app, how long it takes to take a new place (median, 90%, worst). The
+  checks above only look at chosen moments; the watcher catches what you would see in between.
+- **A slow app on purpose.** `lib/slowapp.py` (`harness.open_slow_app(delay_ms, x11=False)`) is a
+  GTK 4 app that takes `delay_ms` to follow every new size, as a big terminal or editor does on a
+  busy machine, so lag problems happen on any machine and screen size. With `x11=True` it runs on
+  Xwayland, where a window moves at once and only its content lags. (Its delay is in the
+  surface's `layout` handler: a slow draw alone doesn't delay the new size, because GTK 4 commits it
+  first.)
+- **Watching.** `sandbox/watch.py` screencasts the sandbox's monitors (Mutter ScreenCast on the
+  sandbox bus → PipeWire → GStreamer) into a window on your desktop, placed as they are laid out
+  (both monitors in the two-monitor scenarios), and reconnects to each new sandbox. It takes several
+  sandboxes (`watch.py sbA sbB`, one window each), and `--record DIR` also records each sandbox
+  session to `DIR/<sandbox>-<start ms>.webm`, with `DIR/index.txt` mapping recordings to scenarios.
+  A watcher episode at `t` s is at about `t + (started_wall_ms − recording start) / 1000` s in the
+  recording.
 
 ## Scenarios
 
@@ -136,6 +164,8 @@ RESULT: 8/12 passed
 | `14_move_out_shares.py` | Moving a window out of its container keeps the size shares at 100% (no gap, nothing off-screen) | [#549](https://github.com/forge-ext/forge/issues/549) |
 | `15_render_on_changes.py` | Forge still puts windows back after an app resizes its own window, or after a maximized window is restored | guard: renders still put windows back |
 | `16_tabbed_edge_resize.py` | Dragging the edge of a window in a tabbed or stacked group resizes the group, from any of its windows | [#561](https://github.com/forge-ext/forge/issues/561) |
+| `17_stack_tab_switching.py` | Stacked and tabbed groups: toggling keeps the split direction, a stack shows a title list, focus returns to the last-used window, rows/tabs can be clicked, and a split inside a group has its own row/tab and shows whole | not filed yet (drafts P14–P16, P18; #230) |
+| `18_slow_redraw_overlap.py` | While an app is slow to follow a new size, its neighbours don't cover it (held resize keys next to `lib/slowapp.py`, a Wayland app that takes 120 ms per new size, with fast X11 and Wayland neighbours) | not filed yet (draft P17) |
 
 `09_fuzz.py --seed N --steps M` is deterministic for a given seed (default 303, so suite runs are
 repeatable); `--seed random` explores. When a step breaks a rule, it stops and prints the steps so
@@ -197,6 +227,10 @@ Screenshots for issues and PRs (`lib/shots.py`):
 - `sandbox/run-in-sandbox.sh <cmd>` runs a program inside the sandbox session.
 - Several sandboxes can run in parallel: give each its own `SANDBOX_DIR`, `SANDBOX_DISPLAY` (e.g.
   `wayland-sbA`) and Forge checkout (`FORGE_SRC`, e.g. a git worktree), because each build runs `make` in it.
+  Each sandbox's session services use about 25 of the per-user inotify instances
+  (`fs.inotify.max_user_instances`, often 128); when they run out, apps fail to start, in your own
+  session too. `launch.sh` refuses to start a sandbox that would leave fewer than 20 free, which on a
+  default system means two sandboxes at a time.
 - `SANDBOX_BACKEND=devkit sandbox/launch.sh` also opens the Mutter devkit viewer. Its monitor is not the
   test monitor, so use `watch.py` to see the tests.
 

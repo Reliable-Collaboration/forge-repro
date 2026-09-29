@@ -15,7 +15,11 @@ Driven with Forge's own shortcuts (Super+Shift+S stacked, Super+Shift+T tabbed, 
   17.8  the close button on a stack's row closes that window
   17.9  with title bars turned off (showtab-decoration-enabled), stacks keep the old cascade, no list
   17.10 if the window last used in a group is closed, focus coming back still lands in the group
-  17.11 a stack holding a container (not only windows) keeps the cascade: no title list
+  17.11 a stack holding a container (a split among its windows) shows a title list too, with one
+        row for the container; clicking that row shows the whole split, and no window is ever
+        partly covered (the old cascade drew the split over the other window)
+  17.12 the same for a tab group: the split has a tab, and with that tab active both of its
+        windows show (not only the focused one, with the other tab showing through)
 
 Run on a fresh sandbox:  sandbox/launch.sh && scenarios/17_stack_tab_switching.py
 """
@@ -116,10 +120,14 @@ def title_list(con_wid):
 
 
 def click(x, y):
-    h.js(f"""(() => {{ const dev = global.stage.context.get_backend().get_default_seat().create_virtual_device(0);
-        const t = GLib.get_monotonic_time();
-        dev.notify_absolute_motion(t, {x}, {y}); dev.notify_button(t + 1000, 1, 1); dev.notify_button(t + 2000, 1, 0);
-        return "ok"; }})()""")
+    """A click like a person's: move, pause, press, pause, release. (Move, press and release within
+    a few milliseconds work in a nested shell, but a real session doesn't take them as a click.)"""
+    h.js(f"""(() => {{ globalThis.__clickDev = global.stage.context.get_backend().get_default_seat().create_virtual_device(0);
+        globalThis.__clickDev.notify_absolute_motion(GLib.get_monotonic_time(), {x}, {y}); return "ok"; }})()""")
+    time.sleep(0.3)
+    h.js("(() => { globalThis.__clickDev.notify_button(GLib.get_monotonic_time(), 1, 1); return 'ok'; })()")
+    time.sleep(0.15)
+    h.js("(() => { globalThis.__clickDev.notify_button(GLib.get_monotonic_time(), 1, 0); return 'ok'; })()")
     time.sleep(1.0)
     h.settle()
 
@@ -260,19 +268,36 @@ def main():
     h.set_forge_setting("showtab-decoration-enabled", True)
     done()
 
-    # 17.11: STACKED[W1, HSPLIT[W2, W3]]: a container has no title row, so no list
-    a, ws = column(2)
-    command(ws[1]["id"], '{name: "Split", orientation: "horizontal"}')
-    activate(ws[1]["id"])
-    new_window()                                        # joins W2's new container
-    activate(ws[0]["id"])
-    key("con-stacked-layout-toggle")
-    print(f"          layout: {h.tree_summary()}")
-    tops = sorted({w["y"] for w in h.windows() if w["id"] != a["id"]})
-    ok = title_list(ws[0]["id"]) is None and len(tops) >= 2
-    print(f"  {'PASS' if ok else 'FAIL'}  17.11: stack with a container: list shown: "
-          f"{title_list(ws[0]['id']) is not None}, window tops {tops} (a cascade)")
-    r.append(ok)
+    # 17.11 / 17.12: GROUP[W1, HSPLIT[W2, W3]]: the container is a member with its own row / tab
+    for name, toggle in (("17.11", "con-stacked-layout-toggle"), ("17.12", "con-tabbed-layout-toggle")):
+        a, ws = column(2)
+        command(ws[1]["id"], '{name: "Split", orientation: "horizontal"}')
+        activate(ws[1]["id"])
+        w3 = new_window()                                   # joins W2's new container
+        activate(ws[0]["id"])
+        key(toggle)
+        print(f"          layout: {h.tree_summary()}")
+        tl = title_list(ws[0]["id"])
+        rows = len(tl["rows"]) if tl else 0
+        seen_first = h.visible_problems()                   # W1 shown, the split hidden behind it
+        clicked = False
+        if rows == 2:
+            other = [row for row in tl["rows"] if not row[4]]   # the container's row / tab
+            if other:
+                x, y, w, hh, _ = other[0]
+                click(x + w // 2, y + hh // 2)
+                clicked = True
+        in_split = focus() in (ws[1]["id"], w3["id"])
+        seen_split = h.visible_problems()                   # the split shown, W1 hidden behind it
+        tl2 = title_list(ws[0]["id"])                    # the group's bar (W1 is directly in it)
+        active = [i for i, row in enumerate(tl2["rows"]) if row[4]] if tl2 else []
+        ok = rows == 2 and clicked and in_split and not seen_first and not seen_split and active == [1]
+        print(f"  {'PASS' if ok else 'FAIL'}  {name}: {'stack' if 'stacked' in toggle else 'tab group'} with a "
+              f"split: rows/tabs {rows} (expected 2), click on the split's goes into it: {in_split}, "
+              f"highlighted {active} (expected [1], the split's); seen with W1 shown: {seen_first or 'fine'}; "
+              f"with the split shown: {seen_split or 'fine'}")
+        r.append(ok)
+        done()
     sys.exit(h.summary(r))
 
 

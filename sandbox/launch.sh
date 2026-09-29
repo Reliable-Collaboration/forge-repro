@@ -50,6 +50,26 @@ fi
 
 for _ in $(seq 20); do [[ -z $(sandbox_pids) ]] && break; sleep 0.5; done
 [[ -z $(sandbox_pids) ]] || { echo "sandbox already running (pid $(sandbox_pids))"; exit 1; }
+
+# Each sandbox starts its own session services (evolution, goa, ibus, gvfs, ...), which use about
+# 25 of the per-user inotify instances (fs.inotify.max_user_instances, often 128). When they run
+# out, apps fail in odd ways, in the sandboxes and in your own session alike (VS Code shows an
+# error instead of its window). So don't start a sandbox that would leave fewer than 20 free.
+inotify_max=$(cat /proc/sys/fs/inotify/max_user_instances 2>/dev/null || echo 0)
+inotify_used() { (find /proc/[0-9]*/fd -lname 'anon_inode:inotify' -user "$(id -u)" 2>/dev/null || true) | wc -l; }
+# Wait up to 5 minutes: the services of a sandbox that has just stopped take a few seconds to
+# exit, and a sandbox running in parallel (e.g. with VS Code open) frees its share when it stops.
+for i in $(seq 150); do
+  inotify_used=$(inotify_used)
+  (( inotify_max == 0 || inotify_max - inotify_used >= 45 )) && break
+  (( i == 1 )) && echo "waiting for inotify instances ($((inotify_max - inotify_used)) of $inotify_max free)..." >&2
+  sleep 2
+done
+if (( inotify_max > 0 && inotify_max - inotify_used < 45 )); then
+  echo "not starting: only $((inotify_max - inotify_used)) of $inotify_max inotify instances free" \
+       "(a sandbox needs about 25, and your session should keep about 20); stop another sandbox first" >&2
+  exit 1
+fi
 [[ -e $FORGE_SRC/.git ]] || { echo "FORGE_SRC=$FORGE_SRC is not a git checkout of forge"; exit 1; }
 
 # SANDBOX_DIR is wiped on every launch: only accept a directory that looks like one of ours.

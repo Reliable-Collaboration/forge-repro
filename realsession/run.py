@@ -36,7 +36,13 @@ FORGE_DCONF = "/org/gnome/shell/extensions/forge/"
 # Scenarios that only open, arrange and close their own windows on the test workspace.
 # Not here: 09 (fuzz: random actions), 10 (moves windows to another workspace), 12 (needs two
 # monitors), 13 (a proposal's setting).
-DEFAULT = ["01", "02", "03", "04", "06", "07", "08", "11", "14", "15", "16", "17"]
+DEFAULT = ["01", "02", "03", "04", "06", "07", "08", "11", "14", "15", "16", "17", "18"]
+# Every scenario also runs under the continuous layout watcher (lib/watchdog.js, as in
+# sandbox/run-suite.sh); an overlap or off-screen episode of this long or longer fails it, unless
+# it is an app stalling, a mouse resize or a window still opening (reported, not failing)
+WATCH_MAX_MS = int(os.environ.get("WATCH_MAX_MS", "250"))
+OUT_DIR = os.path.join(os.environ.get("XDG_CACHE_HOME") or os.path.expanduser("~/.cache"),
+                       "forge-repro", "realsession", time.strftime("%Y%m%d-%H%M%S"))
 
 LEASE = os.path.join(os.environ.get("XDG_CACHE_HOME") or os.path.expanduser("~/.cache"),
                      "forge-test-bridge", "lease")
@@ -152,6 +158,7 @@ def main():
                 continue
             name = os.path.basename(scenario)[:-3]
             print(f"== {name}", flush=True)
+            h.js(open(os.path.join(ROOT, "lib", "watchdog.js")).read())    # watch the whole scenario
             with tempfile.TemporaryDirectory(prefix="forge-real-") as tmp:
                 # throwaway profiles/logs (e.g. VS Code); Forge errors counted from this scenario on
                 env = dict(os.environ, SANDBOX_DIR=tmp, FORGE_TEST_SINCE=str(int(time.time())))
@@ -165,6 +172,21 @@ def main():
                 if any(k in line for k in ("PASS", "FAIL", "SKIP", "RESULT", "Error", "   - ")):
                     print(line, flush=True)
             result = next((l for l in reversed(out.splitlines()) if l.startswith("RESULT")), f"no result (exit {status})")
+            watch = subprocess.run([sys.executable, os.path.join(ROOT, "sandbox", "watchdog.py"), "report"],
+                                   capture_output=True, text=True).stdout
+            h.js("(() => { globalThis.__watchdog?.stop(); delete globalThis.__watchdog; return 'ok'; })()")
+            os.makedirs(OUT_DIR, exist_ok=True)
+            open(os.path.join(OUT_DIR, f"{name}.txt"), "w").write(out)
+            open(os.path.join(OUT_DIR, f"{name}.watch.txt"), "w").write(watch)
+            visible = [l for l in watch.splitlines() if l.startswith("  at ")
+                       and not any(f", {k}" in l for k in ("stall", "drag", "opening"))
+                       and int(l.split(" for ")[1].split()[0]) >= WATCH_MAX_MS]
+            print("  " + (watch.splitlines() or ["watch: no report"])[0].split(" (started")[0], flush=True)
+            for line in visible:
+                print(f"  WATCH FAIL: {line.strip()}", flush=True)
+            if visible and status == 0:
+                status = 1
+                result += f"; WATCH FAIL: {len(visible)} episode(s) of {WATCH_MAX_MS} ms or longer"
             results.append((name, result, status))
             # Clean up after each scenario: its windows (only on the test workspace) and settings
             close_test_windows(test_ws)
@@ -188,7 +210,7 @@ def main():
         time.sleep(0.5)
         print("bridge off" if not unsafe_mode() else "WARNING: unsafe mode is still on; run: "
               f"gnome-extensions disable {BRIDGE}")
-    print("\n== summary (real session)")
+    print(f"\n== summary (real session), outputs in {OUT_DIR}")
     for name, result, _ in results:
         print(f"  {name}: {result}")
     sys.exit(0 if all(s in (0, 77) for _, _, s in results) else 1)
