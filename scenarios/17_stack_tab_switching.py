@@ -15,6 +15,7 @@ Driven with Forge's own shortcuts (Super+Shift+S stacked, Super+Shift+T tabbed, 
   17.8  the close button on a stack's row closes that window
   17.9  with title bars turned off (showtab-decoration-enabled), stacks keep the old cascade, no list
   17.10 if the window last used in a group is closed, focus coming back still lands in the group
+  17.11 a stack holding a container (not only windows) keeps the cascade: no title list
 
 Run on a fresh sandbox:  sandbox/launch.sh && scenarios/17_stack_tab_switching.py
 """
@@ -142,7 +143,7 @@ def main():
         mid = group_of(ws[0]["id"])[0]
         key(toggle)
         after = group_of(ws[0]["id"])[0]
-        ok = after == before
+        ok = mid in ("STACKED", "TABBED") and after == before     # the toggle happened, and was undone
         print(f"  {'PASS' if ok else 'FAIL'}  {name}: {toggle} twice: {before} -> {mid} -> {after}")
         r.append(ok)
         done()
@@ -257,6 +258,21 @@ def main():
           f"window tops {tops} (a cascade: equal steps)")
     r.append(ok)
     h.set_forge_setting("showtab-decoration-enabled", True)
+    done()
+
+    # 17.11: STACKED[W1, HSPLIT[W2, W3]]: a container has no title row, so no list
+    a, ws = column(2)
+    command(ws[1]["id"], '{name: "Split", orientation: "horizontal"}')
+    activate(ws[1]["id"])
+    new_window()                                        # joins W2's new container
+    activate(ws[0]["id"])
+    key("con-stacked-layout-toggle")
+    print(f"          layout: {h.tree_summary()}")
+    tops = sorted({w["y"] for w in h.windows() if w["id"] != a["id"]})
+    ok = title_list(ws[0]["id"]) is None and len(tops) >= 2
+    print(f"  {'PASS' if ok else 'FAIL'}  17.11: stack with a container: list shown: "
+          f"{title_list(ws[0]['id']) is not None}, window tops {tops} (a cascade)")
+    r.append(ok)
     sys.exit(h.summary(r))
 
 

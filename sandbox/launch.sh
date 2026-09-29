@@ -112,17 +112,25 @@ fi
 # Free GNOME's own shortcuts that clash with Forge's (e.g. Super+H minimizes, Super+L locks),
 # as a Forge setup does; otherwise either one may win a key press. Logged in the launch output.
 python3 - "$SANDBOX_DIR/data/gnome-shell/extensions/$FORGE_UUID/schemas" <<'PY'
-import subprocess, sys
-import gi
-gi.require_version("Gtk", "3.0")
-from gi.repository import Gtk
+import ast, subprocess, sys
+try:
+    import gi
+    gi.require_version("Gtk", "3.0")
+    from gi.repository import Gtk
+except (ImportError, ValueError) as e:
+    print(f"not freeing GNOME shortcuts that Forge uses: GTK 3 introspection missing ({e})")
+    sys.exit(0)
 schemadir = sys.argv[1]
 def get(args):
     r = subprocess.run(["gsettings", *args], capture_output=True, text=True)
     return r.stdout.strip() if r.returncode == 0 else None
 def accels(value):
-    import ast
-    return ast.literal_eval(value.replace("@as ", "")) if value else []
+    """The accelerators of a list setting; nothing for any other kind of value."""
+    value = (value or "").strip()
+    if not value.startswith(("[", "@as")):
+        return []
+    parsed = ast.literal_eval(value.replace("@as ", ""))
+    return [a for a in parsed if isinstance(a, str)]
 def norm(a):
     key, mods = Gtk.accelerator_parse(a)
     return (key, int(mods)) if key else None
@@ -134,9 +142,9 @@ for schema in ("org.gnome.desktop.wm.keybindings", "org.gnome.mutter.keybindings
                "org.gnome.settings-daemon.plugins.media-keys"):
     for line in (get(["list-recursively", schema]) or "").splitlines():
         _, key, value = line.split(" ", 2)
-        if not value.startswith(("[", "@as")):
-            continue
         current = accels(value)
+        if not current:
+            continue
         keep = [a for a in current if norm(a) not in taken]
         if keep != current:
             subprocess.run(["gsettings", "set", schema, key, str(keep) if keep else "@as []"], check=True)

@@ -510,11 +510,20 @@ def ensure_parent_layout(win_id, layout):
 
 def close_windows():
     """Close the windows Forge manages on this workspace, on every monitor, one at a time (never
-    the desktop-icons window or other windows Forge does not manage)."""
+    the desktop-icons window or other windows Forge does not manage, nor a window shown on all
+    workspaces). In a real-session run it also never closes a window that existed before the run
+    (FORGE_TEST_PRESERVE), and refuses to act anywhere but the test workspace (FORGE_TEST_WS)."""
+    keep = {int(i) for i in os.environ.get("FORGE_TEST_PRESERVE", "").split(",") if i}
+    if REAL_SESSION and "FORGE_TEST_WS" in os.environ:
+        if js("global.workspace_manager.get_active_workspace_index()") != int(os.environ["FORGE_TEST_WS"]):
+            raise RuntimeError("close_windows: not on the test workspace; closing nothing")
+
     def managed():
-        return js(f"""JSON.stringify({WM}.tree.getNodeByType("WINDOW")
-            .filter(n => n.nodeValue.get_workspace() === global.workspace_manager.get_active_workspace())
-            .map(n => n.nodeValue.get_id()))""")
+        ids = json.loads(js(f"""JSON.stringify({WM}.tree.getNodeByType("WINDOW")
+            .filter(n => n.nodeValue.get_workspace() === global.workspace_manager.get_active_workspace()
+                && !n.nodeValue.is_on_all_workspaces())
+            .map(n => n.nodeValue.get_id()))"""))
+        return json.dumps([i for i in ids if i not in keep])
     while ids := json.loads(managed()):
         wid = ids[0]
         js(f"""(() => {{ global.display.list_all_windows().find(w => w.get_id() === {wid})
