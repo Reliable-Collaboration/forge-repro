@@ -384,11 +384,44 @@ def border_other_workspace(name):
     shots.shot(path("268", name, "after"))
 
 
+def split_then_open(name):
+    """#409: one window, Super+V, open a second one (auto-split on)."""
+    h.set_forge_setting("auto-split-enabled", True)
+    editor()
+    a = h.windows()[0]
+    focus_command(a["id"], '{name: "Split", orientation: "vertical"}')
+    editor()
+    h.settle()
+    shots.shot(path("409", name, "after"))
+
+
+def drag_preview_left(name):
+    """#529: A | B, drag A by its title bar over B, A closes during the drag."""
+    h.set_forge_setting("auto-split-enabled", False)
+    h.set_forge_setting("preview-hint-enabled", True)
+    editor()
+    editor()
+    a, b = sorted(h.windows(), key=lambda w: w["x"])
+    x0, y0 = a["x"] + a["w"] // 2, a["y"] + 18
+    x1, y1 = b["x"] + b["w"] // 2, b["y"] + b["h"] // 2
+
+    def close_a():
+        time.sleep(1.4)
+        h.js(f"""(() => {{ global.display.list_all_windows().find(w => w.get_id() === {a["id"]})
+            .delete(global.get_current_time()); return "ok"; }})()""")
+    h.run_js_file("drag.js", {"__X0__": x0, "__Y0__": y0, "__DX__": x1 - x0, "__DY__": y1 - y0,
+                              "__STEPS__": 40, "__STEP_MS__": 50}, "__drag", close_a)
+    time.sleep(1.5)
+    h.settle()
+    shots.shot(path("529", name, "after"))
+
+
 SHOTS = {"1": cross_container_drag, "532": held_key_cross_container, "2": wrong_edge, "3": past_minimum,
          "4": min_size_fits, "6": stale_tab_bar, "7": nested_same_direction, "9": slow_app,
          "14": move_out, "16": tab_edge,
          "18": toggle_direction, "19": stack_hidden, "20": slow_neighbour, "21": split_in_groups,
-         "470": workspace_removed, "407": split_hint, "268": border_other_workspace}
+         "470": workspace_removed, "407": split_hint, "268": border_other_workspace,
+         "409": split_then_open, "529": drag_preview_left}
 
 # Captions for the composed before/after images: (moment, caption on main, caption with the fix)
 COMPOSE = {
@@ -410,6 +443,8 @@ COMPOSE = {
     "470": [("after", "main: workspace 1 removed - this window is half wide", "fix: it fills its workspace")],
     "407": [("after", "main: Super+V on the right window - no hint", "fix: the vertical split hint")],
     "268": [("after", "main: tiling off, switched to an empty workspace - border left", "fix: nothing left")],
+    "409": [("after", "main: Super+V, then a new window - it opens beside", "fix: it opens below, as chosen")],
+    "529": [("after", "main: dragged window closed mid-drag - its preview stays", "fix: gone")],
     "20": [("during", "before: key held - the fast app covers the slow one", "fix: key held - it waits, no overlap")],
     "21": [("stack", "before: a split in a stack - drawn over the other window", "fix: a title row for it, shown whole"),
            ("tabs", "before: split tab active - the other tab shows through", "fix: the whole split is shown")],
