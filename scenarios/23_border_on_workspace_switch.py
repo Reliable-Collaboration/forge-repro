@@ -28,12 +28,15 @@ def workspace(index):
 
 
 def visible_borders():
-    """Forge's border actors that are showing: [[x, y, w, h], ...]."""
-    return json.loads(h.js("""JSON.stringify(global.window_group.get_children()
-        .filter(a => a.visible && a.has_style_class_name && (a.has_style_class_name("window-tiled-border")
-            || a.has_style_class_name("window-floated-border") || a.has_style_class_name("window-split-border")
-            || a.has_style_class_name("window-stacked-border") || a.has_style_class_name("window-tabbed-border")))
-        .map(a => [Math.round(a.x), Math.round(a.y), Math.round(a.width), Math.round(a.height)]))"""))
+    """The windows whose Forge border (focus or split) is showing: [[title, x, y, w, h], ...]. The
+    desktop icons window (type DESKTOP, e.g. Ubuntu's) is left out: on an empty workspace it gets
+    the focus, and Forge gives it a 6x6 border at 0,0 (under the top bar; not this bug)."""
+    return json.loads(h.js("""JSON.stringify(global.display.list_all_windows()
+        .filter(w => w.get_window_type() !== imports.gi.Meta.WindowType.DESKTOP)
+        .map(w => [w, w.get_compositor_private()])
+        .filter(([w, a]) => a && ((a.border && a.border.visible) || (a.splitBorder && a.splitBorder.visible)))
+        .map(([w, a]) => { const b = a.border?.visible ? a.border : a.splitBorder;
+            return [w.get_title(), Math.round(b.x), Math.round(b.y), Math.round(b.width), Math.round(b.height)]; }))"""))
 
 
 def run(prefix, tiling):

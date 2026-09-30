@@ -171,6 +171,7 @@ RESULT: 8/12 passed
 | `21_split_hint.py` | The split direction hint appears (visible, above the focus border) for a window alone in a container after Super+V / Super+Z | [#407](https://github.com/forge-ext/forge/issues/407) |
 | `22_hover_focus_modal.py` | With focus on hover, typing goes to a shell dialog (Alt+F2), not the window under the pointer. Passes on `main` here: #483 did not reproduce in the sandbox | [#483](https://github.com/forge-ext/forge/issues/483) (not reproduced) |
 | `23_border_on_workspace_switch.py` | With tiling off, switching workspaces leaves no focus border behind | [#268](https://github.com/forge-ext/forge/issues/268) |
+| `24_workspace_change_retrack.py` | Adding or removing a workspace leaves the layout alone (no auto-split of the focused window per re-tracked window) | [#540](https://github.com/forge-ext/forge/issues/540) |
 
 `09_fuzz.py --seed N --steps M` is deterministic for a given seed (default 303, so suite runs are
 repeatable); `--seed random` explores. When a step breaks a rule, it stops and prints the steps so
