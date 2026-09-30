@@ -54,6 +54,10 @@ def main():
               f"{e.get('kind', '?'):6s}: {e['what']}{' (still)' if e.get('ongoing') else ''}{lag}")
         if e.get("where") and e["duration_ms"] >= 100:
             print(f"      where: {e['where']}")
+        if e.get("kind") == "layout" and e.get("drag_ms"):
+            # (an episode that is partly a mouse drag: how much of it wasn't)
+            print(f"      layout for {e['layout_ms']} ms of it, from {e.get('layout_at_ms')} ms"
+                  + (f": {e['layout_where']}" if e.get("layout_where") else ""))
 
 
 main()
