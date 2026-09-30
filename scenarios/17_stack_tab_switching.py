@@ -20,6 +20,8 @@ Driven with Forge's own shortcuts (Super+Shift+S stacked, Super+Shift+T tabbed, 
         partly covered (the old cascade drew the split over the other window)
   17.12 the same for a tab group: the split has a tab, and with that tab active both of its
         windows show (not only the focused one, with the other tab showing through)
+  17.13 a split's tab returns to the window last used in the split: focus its second window, click
+        the other tab, click the split's tab again: focus is back on that second window
 
 Run on a fresh sandbox:  sandbox/launch.sh && scenarios/17_stack_tab_switching.py
 """
@@ -298,6 +300,28 @@ def main():
               f"with the split shown: {seen_split or 'fine'}")
         r.append(ok)
         done()
+    # 17.13: TABBED[W1, HSPLIT[W2, W3]], W3 used last in the split
+    a, ws = column(2)
+    command(ws[1]["id"], '{name: "Split", orientation: "horizontal"}')
+    activate(ws[1]["id"])
+    w3 = new_window()
+    activate(ws[0]["id"])
+    key("con-tabbed-layout-toggle")
+    activate(w3["id"])
+    tl = title_list(ws[0]["id"])
+    ok = False
+    if tl and len(tl["rows"]) == 2:
+        (x0, y0, wd0, h0, _), (x1, y1, wd1, h1, _) = sorted(tl["rows"])
+        click(x0 + wd0 // 2, y0 + h0 // 2)                 # W1's tab (the first)
+        on_w1 = focus() == ws[0]["id"]
+        click(x1 + wd1 // 2, y1 + h1 // 2)                 # the split's tab
+        ok = on_w1 and focus() == w3["id"]
+        print(f"  {'PASS' if ok else 'FAIL'}  17.13: split tab returns to its last-used window: after W1's tab "
+              f"focus on W1: {on_w1}; after the split's tab focus {focus() % 1000} (expected W3 {w3['id'] % 1000})")
+    else:
+        print(f"  FAIL  17.13: expected a tab bar with 2 tabs, got {tl}")
+    r.append(ok)
+    done()
     sys.exit(h.summary(r))
 
 

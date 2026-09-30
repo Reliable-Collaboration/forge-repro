@@ -272,10 +272,62 @@ def stack_hidden(name):
     shots.shot(path("19", name, "after"))
 
 
+def slow_neighbour(name):
+    """Issue L: [slow Wayland app | fast X11 app], hold 'grow left' on the fast one; capture while
+    the key is still held (the slow app is behind)."""
+    h.set_forge_setting("auto-split-enabled", False)
+    ids = []
+    for delay, x11, title in ((150, False, "slow Wayland app"), (0, True, "fast X11 app")):
+        known = {w["id"] for w in h.windows()}
+        h.open_slow_app(delay, x11=x11, title=title, color="#a53b3b" if delay else "#3b6ea5")
+        ids.append(next(w["id"] for w in h.windows() if w["id"] not in known))
+    h.ensure_parent_layout(ids[0], "HSPLIT")
+    h.settle()
+    h.hold_keys(ids[1], h.GROW_KEYS["left"], 2200, during=shots.later(path("20", name, "during"), 1.6))
+
+
+def split_in_groups(name):
+    """Issue M: a split inside a stack (VSPLIT[X, STACKED[W, VSPLIT[P, Q]]], P focused), and a split
+    tab (HSPLIT[A, TABBED[C, HSPLIT[B, B2]]], B focused)."""
+    h.set_forge_setting("auto-split-enabled", False)
+
+    def new():
+        known = {w["id"] for w in h.windows()}
+        editor()
+        return next(w for w in h.windows() if w["id"] not in known)
+
+    def activate(wid):
+        h.js(f"""(() => {{ global.display.list_all_windows().find(w => w.get_id() === {wid})
+            .activate(global.get_current_time()); return "ok"; }})()""")
+        time.sleep(1.0)
+        h.settle()
+
+    x, w = new(), new()
+    h.ensure_parent_layout(x["id"], "VSPLIT")
+    focus_command(w["id"], '{name: "Split", orientation: "vertical"}')
+    p = new()
+    focus_command(p["id"], '{name: "Split", orientation: "vertical"}')
+    new()
+    focus_command(w["id"], '{name: "LayoutStackedToggle"}')
+    activate(p["id"])
+    shots.shot(path("21", name, "stack"))
+    h.close_windows()
+    time.sleep(1.0)
+    a, c = new(), new()
+    h.ensure_parent_layout(a["id"], "HSPLIT")
+    focus_command(c["id"], '{name: "Split", orientation: "horizontal"}')
+    b = new()
+    focus_command(b["id"], '{name: "Split", orientation: "horizontal"}')
+    new()
+    focus_command(c["id"], '{name: "LayoutTabbedToggle"}')
+    activate(b["id"])
+    shots.shot(path("21", name, "tabs"))
+
+
 SHOTS = {"1": cross_container_drag, "532": held_key_cross_container, "2": wrong_edge, "3": past_minimum,
          "4": min_size_fits, "6": stale_tab_bar, "7": nested_same_direction, "9": slow_app,
          "14": move_out, "16": tab_edge,
-         "18": toggle_direction, "19": stack_hidden}
+         "18": toggle_direction, "19": stack_hidden, "20": slow_neighbour, "21": split_in_groups}
 
 # Captions for the composed before/after images: (moment, caption on main, caption with the fix)
 COMPOSE = {
@@ -294,6 +346,9 @@ COMPOSE = {
     "19": [("after", "main: stack of 3, first focused - the others vanish", "fix: a title list shows all three")],
     "16": [("after", "before: dragged the 2nd tab's edge - snapped back", "fix: the border stays where it was let go")],
     "9": [("after-resume", "main: app resumed, window still shifted", "fix: app resumed, window in place")],
+    "20": [("during", "before: key held - the fast app covers the slow one", "fix: key held - it waits, no overlap")],
+    "21": [("stack", "before: a split in a stack - drawn over the other window", "fix: a title row for it, shown whole"),
+           ("tabs", "before: split tab active - the other tab shows through", "fix: the whole split is shown")],
 }
 
 
