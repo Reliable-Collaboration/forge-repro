@@ -168,8 +168,9 @@ RESULT: 8/12 passed
 | `18_slow_redraw_overlap.py` | While an app is slow to follow a new size, its neighbours don't cover it (held resize keys next to `lib/slowapp.py`, a Wayland app that takes 120 ms per new size, with fast X11 and Wayland neighbours) | not filed yet (draft P17) |
 | `19_workspace_removed.py` | Removing a workspace (dynamic workspaces: its last window closed) keeps each later workspace's windows apart | [#470](https://github.com/forge-ext/forge/issues/470) |
 | `20_float_toggle.py` | Super+C floats and tiles each window, also a second window of the same app; "always float" works next to it | [#534](https://github.com/forge-ext/forge/issues/534) |
-| `21_split_hint.py` | The split direction hint appears for a window alone in a container after Super+V / Super+Z | [#407](https://github.com/forge-ext/forge/issues/407) |
+| `21_split_hint.py` | The split direction hint appears (visible, above the focus border) for a window alone in a container after Super+V / Super+Z | [#407](https://github.com/forge-ext/forge/issues/407) |
 | `22_hover_focus_modal.py` | With focus on hover, typing goes to a shell dialog (Alt+F2), not the window under the pointer. Passes on `main` here: #483 did not reproduce in the sandbox | [#483](https://github.com/forge-ext/forge/issues/483) (not reproduced) |
+| `23_border_on_workspace_switch.py` | With tiling off, switching workspaces leaves no focus border behind | [#268](https://github.com/forge-ext/forge/issues/268) |
 
 `09_fuzz.py --seed N --steps M` is deterministic for a given seed (default 303, so suite runs are
 repeatable); `--seed random` explores. When a step breaks a rule, it stops and prints the steps so

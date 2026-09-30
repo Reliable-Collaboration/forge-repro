@@ -4,7 +4,8 @@
 With "split border" on (split-border-toggle), a window alone in a container that will split
 (after Super+V or Super+Z) gets a coloured border on the side where the next window goes. The
 condition that shows it tested `!maximized` where `maximized` is a function (so always false,
-since 2023), and the hint never appeared.
+since d0012e0 in 2023), and even when shown, the hint was stacked under the focus border, which
+shares its place: it never appeared.
 
   21.1  A | B; Super+V on B (B alone in a vertical split): B shows the vertical split hint
   21.2  Super+Z (horizontal) on the same: the hint turns horizontal
@@ -35,14 +36,17 @@ def command(wid, cmd):
 
 
 def hint(wid):
-    """The split hint of window `wid`: [visible, direction, x, y, w, h] or None."""
+    """The split hint of window `wid`: [shown, direction, x, y, w, h] or None. Shown means visible
+    and stacked above the window's focus border (the two share a place, so under it, it is hidden)."""
     return json.loads(h.js(f"""JSON.stringify((() => {{
         const w = global.display.list_all_windows().find(w => w.get_id() === {wid});
-        const b = w?.get_compositor_private()?.splitBorder;
+        const act = w?.get_compositor_private(), b = act?.splitBorder;
         if (!b) return null;
+        const kids = global.window_group.get_children();
+        const onTop = !act.border || kids.indexOf(b) > kids.indexOf(act.border);
         const dir = b.has_style_class_name("window-split-vertical") ? "vertical"
             : b.has_style_class_name("window-split-horizontal") ? "horizontal" : "none";
-        return [b.visible, dir, b.x, b.y, b.width, b.height]; }})())"""))
+        return [b.visible && onTop, dir, b.x, b.y, b.width, b.height]; }})())"""))
 
 
 def main():

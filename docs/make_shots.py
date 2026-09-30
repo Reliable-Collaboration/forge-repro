@@ -324,10 +324,71 @@ def split_in_groups(name):
     shots.shot(path("21", name, "tabs"))
 
 
+def _goto_workspace(index):
+    h.js(f"""(() => {{ const wm = global.workspace_manager;
+        while (wm.get_n_workspaces() <= {index}) wm.append_new_workspace(false, global.get_current_time());
+        wm.get_workspace_by_index({index}).activate(global.get_current_time()); return "ok"; }})()""")
+    time.sleep(1.2)
+    h.settle()
+
+
+def workspace_removed(name):
+    """#470: a window on each of workspaces 1-3; close the one on workspace 1 (from workspace 2)."""
+    h.set_forge_setting("auto-split-enabled", False)
+    h.js('(() => { new imports.gi.Gio.Settings({schema_id: "org.gnome.mutter"})'
+         '.set_boolean("dynamic-workspaces", true); return "ok"; })()')
+    time.sleep(1.0)
+    ids = []
+    for index in range(3):
+        known = {w["id"] for w in h.windows()}
+        editor()
+        wid = next(w["id"] for w in h.windows() if w["id"] not in known)
+        if index:
+            h.js(f"""(() => {{ global.display.list_all_windows().find(w => w.get_id() === {wid})
+                .change_workspace_by_index({index}, false); return "ok"; }})()""")
+            time.sleep(0.8)
+        ids.append(wid)
+    _goto_workspace(1)
+    h.js(f"""(() => {{ global.display.list_all_windows().find(w => w.get_id() === {ids[0]})
+        .delete(global.get_current_time()); return "ok"; }})()""")
+    time.sleep(1.5)
+    _goto_workspace(0)                      # the old workspace 2, now the first
+    shots.shot(path("470", name, "after"))
+
+
+def split_hint(name):
+    """#407: A | B, Super+V on B (B alone in a vertical split)."""
+    h.set_forge_setting("auto-split-enabled", False)
+    h.set_forge_setting("split-border-toggle", True)
+    h.set_forge_setting("focus-border-toggle", True)
+    editor()
+    editor()
+    a, b = sorted(h.windows(), key=lambda w: w["x"])
+    h.ensure_parent_layout(a["id"], "HSPLIT")
+    focus_command(b["id"], '{name: "Split", orientation: "vertical"}')
+    h.settle()
+    shots.shot(path("407", name, "after"))
+
+
+def border_other_workspace(name):
+    """#268: tiling off, a focused window on workspace 1; switch to (empty) workspace 2."""
+    h.set_forge_setting("tiling-mode-enabled", False)
+    h.set_forge_setting("focus-border-toggle", True)
+    time.sleep(0.8)
+    editor()
+    wid = h.windows()[0]["id"]
+    h.js(f"""(() => {{ global.display.list_all_windows().find(w => w.get_id() === {wid})
+        .activate(global.get_current_time()); return "ok"; }})()""")
+    time.sleep(1.0)
+    _goto_workspace(1)
+    shots.shot(path("268", name, "after"))
+
+
 SHOTS = {"1": cross_container_drag, "532": held_key_cross_container, "2": wrong_edge, "3": past_minimum,
          "4": min_size_fits, "6": stale_tab_bar, "7": nested_same_direction, "9": slow_app,
          "14": move_out, "16": tab_edge,
-         "18": toggle_direction, "19": stack_hidden, "20": slow_neighbour, "21": split_in_groups}
+         "18": toggle_direction, "19": stack_hidden, "20": slow_neighbour, "21": split_in_groups,
+         "470": workspace_removed, "407": split_hint, "268": border_other_workspace}
 
 # Captions for the composed before/after images: (moment, caption on main, caption with the fix)
 COMPOSE = {
@@ -346,6 +407,9 @@ COMPOSE = {
     "19": [("after", "main: stack of 3, first focused - the others vanish", "fix: a title list shows all three")],
     "16": [("after", "before: dragged the 2nd tab's edge - snapped back", "fix: the border stays where it was let go")],
     "9": [("after-resume", "main: app resumed, window still shifted", "fix: app resumed, window in place")],
+    "470": [("after", "main: workspace 1 removed - this window is half wide", "fix: it fills its workspace")],
+    "407": [("after", "main: Super+V on the right window - no hint", "fix: the vertical split hint")],
+    "268": [("after", "main: tiling off, switched to an empty workspace - border left", "fix: nothing left")],
     "20": [("during", "before: key held - the fast app covers the slow one", "fix: key held - it waits, no overlap")],
     "21": [("stack", "before: a split in a stack - drawn over the other window", "fix: a title row for it, shown whole"),
            ("tabs", "before: split tab active - the other tab shows through", "fix: the whole split is shown")],
