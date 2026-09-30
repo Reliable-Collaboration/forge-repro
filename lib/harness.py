@@ -88,7 +88,14 @@ def open_app(*argv, timeout=10, log=None):
     before = len(windows())
     out = open(log, "a") if log else subprocess.DEVNULL
     launcher = [] if REAL_SESSION else [os.path.join(ROOT, "sandbox", "run-in-sandbox.sh")]
-    subprocess.Popen([*launcher, *argv],
+    env = None
+    if REAL_SESSION:
+        # Apps start from scratch as in the sandbox, not from what they saved in earlier scenarios
+        # or your own use (e.g. Text Editor restores its windows, maximized ones too): their data
+        # and state go to this scenario's throwaway directory
+        env = dict(os.environ, XDG_DATA_HOME=os.path.join(SANDBOX_DIR, "app-data"),
+                   XDG_STATE_HOME=os.path.join(SANDBOX_DIR, "app-state"))
+    subprocess.Popen([*launcher, *argv], env=env,
                      stdout=out, stderr=out, stdin=subprocess.DEVNULL, start_new_session=True)
     for _ in range(int(timeout * 4)):
         time.sleep(0.25)

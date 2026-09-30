@@ -56,8 +56,13 @@ def checks(prefix, a, b, c):
     delta = -150 if side in ("left", "top") else 150
     before = h.edge(h.find(h.windows(), b["id"]), side)
     c0 = h.find(h.windows(), c["id"])
-    _, grabbed, _ = h.drag_edge(b["id"], side, delta)
-    r.append(grabbed and h.settle_check(f"{prefix}.1 check 1: drag Files|Ptyxis border", b["id"], side, a["id"], before + delta))
+    _, grabbed, dlog = h.drag_edge(b["id"], side, delta)
+    if grabbed:
+        r.append(h.settle_check(f"{prefix}.1 check 1: drag Files|Ptyxis border", b["id"], side, a["id"], before + delta))
+    else:
+        print(f"  FAIL  {prefix}.1 check 1: drag Files|Ptyxis border: the press didn't start a resize; "
+              f"drag log: {' / '.join(dlog[:3])}")
+        r.append(False)
     c1 = h.find(h.windows(), c["id"])
     if c1["playout"] == ("HSPLIT" if side in h.HORIZONTAL else "VSPLIT"):
         # Files and VS Code split in the resize direction: VS Code must keep its size (issue 7)
