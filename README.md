@@ -174,6 +174,9 @@ RESULT: 8/12 passed
 | `24_workspace_change_retrack.py` | Adding or removing a workspace leaves the layout alone (no auto-split of the focused window per re-tracked window) | [#540](https://github.com/forge-ext/forge/issues/540) |
 | `25_split_then_open.py` | After Super+V / Super+Z, the next window opens in the chosen direction with auto-split on (also after a menu popped up) | [#409](https://github.com/forge-ext/forge/issues/409) |
 | `26_drag_preview_left.py` | A window drag's drop preview goes away, also when the dragged window closes or loses the focus during the drag | [#529](https://github.com/forge-ext/forge/issues/529), #433, #175 |
+| `27_empty_window_config.py` | An empty or broken windows.json doesn't stop Forge from starting; the broken file is kept as windows.json.bak | [#415](https://github.com/forge-ext/forge/issues/415) |
+| `28_snap_layout.py` | Snapping a window (Ctrl+Alt+T etc.) floats that window only, right away; nothing is saved for its whole app | [#469](https://github.com/forge-ext/forge/issues/469) |
+| `29_settings_after_disable.py` | Changing a Forge setting while Forge is disabled (e.g. locked screen) raises no errors | seen in #469's log |
 
 `09_fuzz.py --seed N --steps M` is deterministic for a given seed (default 303, so suite runs are
 repeatable); `--seed random` explores. When a step breaks a rule, it stops and prints the steps so

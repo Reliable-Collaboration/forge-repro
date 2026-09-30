@@ -14,6 +14,8 @@ just chose.
         C opens beside or below B according to B's shape (the rule is unchanged)
   25.5  one window, Super+V, then a popup menu opens and closes (F10), then open another: it still
         opens below (a menu is no window of its own for the layout)
+  25.6  the same with a dialog (Ctrl+O, the file chooser) instead of the menu: dialogs float, so
+        it doesn't count either (skipped if no dialog appears)
 
 Run on a fresh sandbox:  sandbox/launch.sh && scenarios/25_split_then_open.py
 """
@@ -108,6 +110,24 @@ def main():
     b = new_editor()
     print(f"          (windows other than normal ones while the menu was open: {popups})")
     r.append(check("25.5 Super+V, a menu opens and closes, open another", a["id"], b["id"], "below"))
+    h.close_windows()
+    time.sleep(1.0)
+
+    a = new_editor()
+    command(a["id"], '{name: "Split", orientation: "vertical"}')
+    h.hold_keys(a["id"], "0xffe3, 0x6f", 0)    # Ctrl+O: the file chooser dialog
+    time.sleep(2.0)
+    dialogs = h.js("global.display.list_all_windows().filter(w => w.get_window_type() === 3 "
+                   "|| w.get_window_type() === 4 || w.get_transient_for() !== null).length")
+    if dialogs:
+        h.js("""(() => { global.display.list_all_windows().filter(w => w.get_window_type() === 3
+            || w.get_window_type() === 4 || w.get_transient_for() !== null)
+            .forEach(w => w.delete(global.get_current_time())); return "ok"; })()""")
+        time.sleep(1.0)
+        b = new_editor()
+        r.append(check("25.6 Super+V, a dialog opens and closes, open another", a["id"], b["id"], "below"))
+    else:
+        print("  SKIP  25.6: no dialog appeared for Ctrl+O here")
     h.close_windows()
     sys.exit(h.summary(r))
 
