@@ -176,7 +176,9 @@ RESULT: 8/12 passed
 | `26_drag_preview_left.py` | A window drag's drop preview goes away, also when the dragged window closes or loses the focus during the drag | [#529](https://github.com/forge-ext/forge/issues/529), #433, #175 |
 | `27_empty_window_config.py` | An empty or broken windows.json doesn't stop Forge from starting; the broken file is kept as windows.json.bak | [#415](https://github.com/forge-ext/forge/issues/415) |
 | `28_snap_layout.py` | Snapping a window (Ctrl+Alt+T etc.) floats that window only, right away; nothing is saved for its whole app | [#469](https://github.com/forge-ext/forge/issues/469) |
-| `29_settings_after_disable.py` | Changing a Forge setting while Forge is disabled (e.g. locked screen) raises no errors | seen in #469's log |
+| `29_settings_after_disable.py` | Nothing of Forge runs after it is disabled (e.g. locked screen): no errors from a setting change or a window closing | [#581](https://github.com/forge-ext/forge/issues/581), seen in #469's log |
+| `30_stylesheet_missing_rules.py` | Forge starts with an empty, incomplete, commented or broken stylesheet of its own; the stylesheet is completed and the old one kept as stylesheet.css.bak | [#448](https://github.com/forge-ext/forge/issues/448) |
+| `31_stylesheet_update_backup.py` | After a Forge update the stylesheet backup goes next to it (not `~/undefined.bak`), and a read-only install doesn't stop Forge at the next update | [#266](https://github.com/forge-ext/forge/issues/266) |
 
 `09_fuzz.py --seed N --steps M` is deterministic for a given seed (default 303, so suite runs are
 repeatable); `--seed random` explores. When a step breaks a rule, it stops and prints the steps so

@@ -177,7 +177,12 @@ gsettings set org.gnome.shell welcome-dialog-last-shown-version '999'
 # The helper extension (and Forge) load on any GNOME Shell version
 gsettings set org.gnome.shell disable-extension-version-validation true
 
+# (GNOME Shell gets a home of its own in the sandbox: it changes to its home directory when it
+# starts, so files it writes relative to its working directory, e.g. Forge's stylesheet backup
+# before forge-ext/forge#266 was fixed, and its cache and state don't land in yours)
 setsid dbus-run-session -- bash -c '
+  export HOME="'"$SANDBOX_DIR"'/home"
+  mkdir -p "$HOME" && cd "$HOME" || exit 1
   echo "$DBUS_SESSION_BUS_ADDRESS" > "'"$SANDBOX_DIR"'/bus-address"
   exec gnome-shell --wayland --mode='"$MODE"' --'"$BACKEND"' --virtual-monitor '"$SIZE"' '"$EXTRA"' \
        --wayland-display '"$SANDBOX_DISPLAY"'
